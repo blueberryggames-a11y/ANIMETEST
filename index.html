@@ -480,7 +480,7 @@ footer span { color: var(--pink); }
           <div class="server-label">Server</div>
           <div class="server-row" id="serverRow"></div>
           <div class="server-notice" id="serverNotice">
-            ⚠ If this server shows an error, try another server above. Some servers may not have every episode.
+            💡 Seeing a YouTube trailer or a loading screen? The current server doesn't have this episode yet — tap another server above. Try them all until one plays.
           </div>
           <div class="watch-desc" id="watchDesc"></div>
           <button class="read-more" id="readMoreBtn" onclick="toggleDesc()">Read more ▾</button>
@@ -576,29 +576,35 @@ function getSeason() {
 }
 
 // ── SERVERS ───────────────────────────────────────────────────────────────
-// Verified working embed providers as of 2025/2026:
-//
-// vidsrc.cc  — public documented API, AniList IDs, /v2/embed/anime/{id}/{ep}/{sub|dub}
-// vidsrc.icu — public documented API, AniList IDs, /embed/anime/{id}/{ep}/{0|1}
-// vidsrc.me  — original vidsrc, MAL IDs, /embed/anime?malId={id}&episode={ep}
-//              Uses anime.idMal which we fetch from AniList alongside all other data.
+// 5 servers with different backends so there's always a fallback.
+// S1 (vidsrc.cc) may show a YouTube trailer for brand-new anime not yet indexed —
+// that's a known behavior. If it happens just hit Server 2, 3, etc.
 
 function buildServersFor(aniId, malId, ep) {
   const dubCc  = currentLang === 'dub' ? 'dub' : 'sub';
   const dubIcu = currentLang === 'dub' ? '1' : '0';
+  const dubBool = currentLang === 'dub' ? 'true' : 'false';
   currentServers = [
     {
-      name: 'VidSrc',
+      name: 'Server 1',
       url: `https://vidsrc.cc/v2/embed/anime/${aniId}/${ep}/${dubCc}`
     },
     {
-      name: 'VidSrc 2',
+      name: 'Server 2',
+      url: `https://player.vidplus.to/embed/anime/${aniId}/${ep}?dub=${dubBool}&autoplay=true`
+    },
+    {
+      name: 'Server 3',
       url: `https://vidsrc.icu/embed/anime/${aniId}/${ep}/${dubIcu}`
     },
     ...(malId ? [{
-      name: 'VidSrc OG',
+      name: 'Server 4',
       url: `https://vidsrc.me/embed/anime?malId=${malId}&episode=${ep}&type=${currentLang}`
-    }] : [])
+    }] : []),
+    {
+      name: 'Server 5',
+      url: `https://vidsrc.xyz/embed/anime?aid=${aniId}&ep=${ep}`
+    }
   ];
 }
 
