@@ -4,7 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AniBlossom — Watch Anime Free</title>
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
+
+<!-- Favicon: official AniBlossom SVG logo -->
+<link rel="icon" type="image/svg+xml" href="https://raw.githubusercontent.com/AniBlossom/AniBlossom/main/icons/AniBlossom.svg">
+<link rel="alternate icon" href="https://raw.githubusercontent.com/AniBlossom/AniBlossom/main/icons/AniBlossom.svg">
+
+<!-- Font: Plus Jakarta Sans — clean, bold, modern; matches the "Watch History" reference -->
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
 
 <!-- Firebase -->
 <script type="module">
@@ -39,7 +45,6 @@
         document.getElementById('app').style.display = 'block';
       }
     } catch(e) {
-      // If can't read, show app normally
       document.getElementById('app').style.display = 'block';
     }
   }
@@ -66,6 +71,9 @@
   --muted: #6e6a85;
   --sidebar-w: 320px;
   --nav-h: 56px;
+  /* Font stack — Plus Jakarta Sans as primary body/UI font */
+  --font-body: 'Plus Jakarta Sans', sans-serif;
+  --font-display: 'Playfair Display', serif;
 }
 * { margin:0; padding:0; box-sizing:border-box; }
 html { scroll-behavior: smooth; }
@@ -73,12 +81,14 @@ html { scroll-behavior: smooth; }
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'Outfit', sans-serif;
+  font-family: var(--font-body);
   min-height: 100vh;
   overflow-x: hidden;
+  /* Plus Jakarta Sans renders crisper with slight smoothing */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Subtle petal scatter bg */
 body::before {
   content: '';
   position: fixed; inset: 0;
@@ -117,16 +127,17 @@ body::before {
   100% { transform: translateY(110vh) rotate(720deg) scale(1.1); opacity: 0; }
 }
 .maint-logo {
-  font-family: 'Playfair Display', serif;
+  font-family: var(--font-display);
   font-size: clamp(2.5rem, 6vw, 4.5rem);
   font-weight: 900;
   background: linear-gradient(135deg, #ffb7d5, #e86db0, #f4a6cc);
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   margin-bottom: 0.5rem;
   position: relative; z-index: 1;
+  display: flex; align-items: center; gap: 0.5rem; justify-content: center;
 }
 .maint-blossom-icon {
-  font-size: 4rem;
+  width: 56px; height: 56px;
   margin-bottom: 1rem;
   animation: floatBlossom 3s ease-in-out infinite;
   position: relative; z-index: 1;
@@ -179,14 +190,21 @@ nav {
   display: flex; align-items: center; padding: 0 1.5rem; gap: 1.25rem;
 }
 .logo {
-  font-family: 'Playfair Display', serif;
+  font-family: var(--font-display);
   font-size: 1.4rem; font-weight: 900;
   background: linear-gradient(135deg, #ffb7d5, #e86db0);
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   cursor: pointer; flex-shrink: 0; user-select: none;
-  display: flex; align-items: center; gap: 6px;
+  display: flex; align-items: center; gap: 8px;
 }
-.logo-icon { font-size: 1.1rem; -webkit-text-fill-color: initial; }
+/* Logo SVG image in nav */
+.logo-img {
+  width: 26px; height: 26px;
+  object-fit: contain;
+  flex-shrink: 0;
+  /* Reset the gradient clip so the img shows normally */
+  -webkit-text-fill-color: initial;
+}
 
 .nav-search {
   flex: 1; max-width: 480px; position: relative;
@@ -198,7 +216,7 @@ nav {
   border-radius: 8px;
   padding: 0.45rem 1rem 0.45rem 2.4rem;
   color: var(--text);
-  font-family: 'Outfit', sans-serif;
+  font-family: var(--font-body);
   font-size: 0.9rem;
   outline: none;
   transition: border-color 0.2s;
@@ -222,14 +240,15 @@ nav {
 .sd-item:hover { background: var(--surface); }
 .sd-thumb { width: 38px; height: 54px; object-fit: cover; border-radius: 4px; background: var(--border); flex-shrink: 0; }
 .sd-info { min-width: 0; }
-.sd-title { font-weight: 600; font-size: 0.88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sd-title { font-weight: 700; font-size: 0.88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sd-meta { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
 
 .nav-right { margin-left: auto; display: flex; align-items: center; gap: 0.75rem; }
 .nav-tabs { display: flex; gap: 0.25rem; }
 .ntab {
   background: none; border: none; color: var(--muted);
-  font-family: 'Outfit', sans-serif; font-size: 0.85rem; font-weight: 500;
+  font-family: var(--font-body); font-size: 0.82rem; font-weight: 700;
+  letter-spacing: 0.3px;
   padding: 0.35rem 0.75rem; border-radius: 6px; cursor: pointer; transition: all 0.15s;
 }
 .ntab:hover { color: var(--text); background: var(--surface); }
@@ -238,8 +257,8 @@ nav {
 .nav-btn {
   background: none; border: 1px solid var(--border);
   color: var(--muted); border-radius: 7px;
-  padding: 0.35rem 0.85rem; font-family: 'Outfit', sans-serif;
-  font-size: 0.82rem; font-weight: 500; cursor: pointer; transition: all 0.2s;
+  padding: 0.35rem 0.85rem; font-family: var(--font-body);
+  font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
   white-space: nowrap;
 }
 .nav-btn:hover { border-color: var(--accent); color: var(--accent); }
@@ -250,7 +269,7 @@ nav {
   width: 32px; height: 32px; border-radius: 50%;
   background: linear-gradient(135deg, var(--accent), var(--accent2));
   border: none; cursor: pointer; display: flex; align-items: center; justify-content: center;
-  font-size: 0.85rem; font-weight: 700; color: #fff;
+  font-size: 0.85rem; font-weight: 800; color: #fff;
 }
 
 /* ── GENRE TABS ──────────────────────────────────────────────────── */
@@ -265,7 +284,7 @@ nav {
 .genre-tab {
   flex-shrink: 0;
   background: none; border: none; color: var(--muted);
-  font-family: 'Outfit', sans-serif; font-size: 0.82rem; font-weight: 500;
+  font-family: var(--font-body); font-size: 0.82rem; font-weight: 600;
   padding: 0.25rem 0.9rem; border-radius: 20px; cursor: pointer; transition: all 0.15s;
   white-space: nowrap;
 }
@@ -308,21 +327,23 @@ nav {
 }
 .hero-badges { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
 .hbadge {
-  font-size: 0.72rem; font-weight: 600; padding: 2px 10px; border-radius: 4px;
+  font-size: 0.72rem; font-weight: 700; padding: 2px 10px; border-radius: 4px;
   border: 1px solid var(--border); color: var(--muted); background: rgba(20,20,24,0.7);
   letter-spacing: 0.5px;
 }
 .hbadge.pink { border-color: var(--accent); color: var(--accent); background: rgba(232,109,176,0.1); }
 .hero-title {
   font-size: clamp(1.8rem, 3.5vw, 3rem);
-  font-weight: 700; line-height: 1.1;
+  font-weight: 800; line-height: 1.1;
   margin-bottom: 0.6rem;
   text-shadow: 0 2px 20px rgba(0,0,0,0.8);
+  letter-spacing: -0.02em;
 }
 .hero-genres { display: flex; gap: 0.4rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
 .hgenre {
   font-size: 0.72rem; background: rgba(255,255,255,0.08);
   border-radius: 4px; padding: 2px 8px; color: var(--text);
+  font-weight: 500;
 }
 .hero-desc {
   font-size: 0.88rem; color: rgba(240,238,245,0.75); line-height: 1.6;
@@ -333,15 +354,15 @@ nav {
 .btn-watch {
   background: var(--accent); color: #fff; border: none;
   border-radius: 8px; padding: 0.6rem 1.5rem;
-  font-family: 'Outfit', sans-serif; font-size: 0.95rem; font-weight: 600;
+  font-family: var(--font-body); font-size: 0.95rem; font-weight: 700;
   cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 0.4rem;
 }
 .btn-watch:hover { background: var(--blossom2); box-shadow: 0 0 20px rgba(232,109,176,0.4); }
 .btn-info {
   background: rgba(255,255,255,0.1); color: var(--text);
   border: 1px solid rgba(255,255,255,0.15); border-radius: 8px;
-  padding: 0.6rem 1.25rem; font-family: 'Outfit', sans-serif;
-  font-size: 0.95rem; font-weight: 500; cursor: pointer; transition: all 0.2s;
+  padding: 0.6rem 1.25rem; font-family: var(--font-body);
+  font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
   backdrop-filter: blur(4px);
 }
 .btn-info:hover { background: rgba(255,255,255,0.18); }
@@ -365,9 +386,12 @@ nav {
 /* WATCH HISTORY BAR */
 .history-bar { padding: 1rem 1.5rem 0; }
 .section-hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.85rem; }
-.section-hd h2 { font-size: 0.95rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; }
-.section-hd h2 span { color: var(--accent); }
-.see-all { font-size: 0.78rem; color: var(--muted); text-decoration: none; cursor: pointer; transition: color 0.15s; }
+.section-hd h2 {
+  font-size: 0.78rem; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase;
+  color: var(--muted); display: flex; align-items: center; gap: 0.5rem;
+}
+.section-hd h2 strong { font-size: 1.05rem; font-weight: 800; color: var(--text); text-transform: none; letter-spacing: -0.01em; display: block; }
+.see-all { font-size: 0.78rem; color: var(--muted); text-decoration: none; cursor: pointer; transition: color 0.15s; font-weight: 600; }
 .see-all:hover { color: var(--accent); }
 
 .hist-row { display: flex; gap: 0.75rem; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; }
@@ -386,7 +410,7 @@ nav {
 .hist-ep-tag {
   position: absolute; top: 5px; left: 5px;
   background: rgba(13,13,18,0.85); border-radius: 4px;
-  padding: 1px 6px; font-size: 0.7rem; font-weight: 600;
+  padding: 1px 6px; font-size: 0.7rem; font-weight: 700;
 }
 .hist-time-tag {
   position: absolute; bottom: 6px; right: 5px;
@@ -401,7 +425,7 @@ nav {
   opacity: 0; transition: opacity 0.2s;
 }
 .hist-card:hover .hist-close { opacity: 1; }
-.hist-name { padding: 0.35rem 0.5rem; font-size: 0.78rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--card); }
+.hist-name { padding: 0.35rem 0.5rem; font-size: 0.78rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--card); }
 
 /* TABS BAR */
 .list-tabs {
@@ -410,7 +434,7 @@ nav {
 }
 .ltab {
   background: none; border: none; border-bottom: 2px solid transparent;
-  color: var(--muted); font-family: 'Outfit', sans-serif; font-size: 0.88rem; font-weight: 600;
+  color: var(--muted); font-family: var(--font-body); font-size: 0.88rem; font-weight: 700;
   padding: 0.5rem 1rem; cursor: pointer; transition: all 0.15s; margin-bottom: -1px;
 }
 .ltab:hover { color: var(--text); }
@@ -432,16 +456,19 @@ nav {
 .ac-img-w { position: relative; aspect-ratio: 2/3; overflow: hidden; }
 .ac-img-w img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.3s; }
 .ac:hover .ac-img-w img { transform: scale(1.04); }
-.ac-score { position: absolute; top: 5px; right: 5px; background: rgba(13,13,18,0.88); border: 1px solid var(--gold); color: var(--gold); font-size: 0.7rem; font-weight: 700; padding: 1px 6px; border-radius: 3px; }
-.ac-ep { position: absolute; bottom: 5px; left: 5px; background: rgba(232,109,176,0.9); color: #fff; font-size: 0.68rem; font-weight: 700; padding: 1px 6px; border-radius: 3px; }
+.ac-score { position: absolute; top: 5px; right: 5px; background: rgba(13,13,18,0.88); border: 1px solid var(--gold); color: var(--gold); font-size: 0.7rem; font-weight: 800; padding: 1px 6px; border-radius: 3px; }
+.ac-ep { position: absolute; bottom: 5px; left: 5px; background: rgba(232,109,176,0.9); color: #fff; font-size: 0.68rem; font-weight: 800; padding: 1px 6px; border-radius: 3px; }
 .ac-dot { position: absolute; top: 5px; left: 5px; width: 7px; height: 7px; border-radius: 50%; background: #4ade80; }
 .ac-info { padding: 0.5rem 0.6rem 0.6rem; }
-.ac-title { font-size: 0.82rem; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.ac-meta { font-size: 0.7rem; color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ac-title { font-size: 0.82rem; font-weight: 700; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ac-meta { font-size: 0.7rem; color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
 
 /* SIDEBAR */
 .sb-section { margin-bottom: 1.5rem; }
-.sb-title { font-size: 0.82rem; font-weight: 700; letter-spacing: 1px; color: var(--muted); text-transform: uppercase; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.4rem; }
+.sb-title {
+  font-size: 0.78rem; font-weight: 700; letter-spacing: 0.8px; color: var(--muted);
+  text-transform: uppercase; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.4rem;
+}
 .sb-title::before { content: '›'; color: var(--accent); font-size: 1rem; }
 .sb-list { display: flex; flex-direction: column; gap: 0.5rem; }
 .sb-item {
@@ -451,8 +478,8 @@ nav {
 .sb-item:hover { background: var(--card); }
 .sb-thumb { width: 42px; height: 58px; object-fit: cover; border-radius: 5px; background: var(--border); flex-shrink: 0; }
 .sb-info { min-width: 0; flex: 1; }
-.sb-name { font-size: 0.83rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sb-sub { font-size: 0.7rem; color: var(--muted); margin-top: 2px; display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; }
+.sb-name { font-size: 0.83rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sb-sub { font-size: 0.7rem; color: var(--muted); margin-top: 2px; display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; font-weight: 500; }
 .sb-live { display: inline-block; width: 6px; height: 6px; background: #4ade80; border-radius: 50%; }
 
 /* PAGINATION */
@@ -460,7 +487,7 @@ nav {
 .pg-btn {
   background: var(--surface); border: 1px solid var(--border);
   color: var(--muted); border-radius: 6px; padding: 0.4rem 0.85rem;
-  font-family: 'Outfit', sans-serif; font-size: 0.85rem; cursor: pointer; transition: all 0.15s;
+  font-family: var(--font-body); font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.15s;
 }
 .pg-btn:hover, .pg-btn.active { border-color: var(--accent); color: var(--accent); }
 .pg-btn:disabled { opacity: 0.3; cursor: not-allowed; }
@@ -487,20 +514,20 @@ nav {
 }
 .back-btn {
   background: none; border: 1px solid var(--border); color: var(--muted);
-  border-radius: 6px; padding: 0.35rem 0.85rem; font-family: 'Outfit', sans-serif;
-  font-size: 0.82rem; cursor: pointer; transition: all 0.2s;
+  border-radius: 6px; padding: 0.35rem 0.85rem; font-family: var(--font-body);
+  font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
   display: flex; align-items: center; gap: 0.4rem;
 }
 .back-btn:hover { border-color: var(--accent); color: var(--accent); }
 
 .watch-info { margin-top: 1rem; }
-.ep-title { font-size: 1.1rem; font-weight: 700; }
+.ep-title { font-size: 1.1rem; font-weight: 800; letter-spacing: -0.01em; }
 .ep-meta { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.4rem; flex-wrap: wrap; }
-.ep-date { font-size: 0.8rem; color: var(--muted); }
-.badge { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; font-size: 0.75rem; font-weight: 600; color: var(--muted); }
+.ep-date { font-size: 0.8rem; color: var(--muted); font-weight: 500; }
+.badge { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; font-size: 0.75rem; font-weight: 700; color: var(--muted); }
 .badge.pink { border-color: var(--accent); color: var(--accent); background: rgba(232,109,176,0.08); }
 .ep-actions { display: flex; gap: 0.5rem; margin-left: auto; }
-.ep-action-btn { background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 0.3rem 0.75rem; font-size: 0.78rem; cursor: pointer; transition: all 0.15s; }
+.ep-action-btn { background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 0.3rem 0.75rem; font-size: 0.78rem; font-weight: 600; cursor: pointer; transition: all 0.15s; }
 .ep-action-btn:hover { border-color: var(--accent); color: var(--accent); }
 .ep-desc { margin-top: 0.75rem; font-size: 0.88rem; color: rgba(240,238,245,0.75); line-height: 1.65; }
 
@@ -515,25 +542,25 @@ nav {
 .dpb {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 5px; padding: 0.3rem 0; text-align: center;
-  font-size: 0.72rem; font-weight: 600; color: var(--muted); cursor: pointer; transition: all 0.15s;
+  font-size: 0.72rem; font-weight: 700; color: var(--muted); cursor: pointer; transition: all 0.15s;
 }
 .dpb:hover { border-color: var(--accent); color: var(--accent); }
 .detail-info { flex: 1; min-width: 0; }
-.detail-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 2px; }
+.detail-title { font-size: 1.2rem; font-weight: 800; margin-bottom: 2px; letter-spacing: -0.01em; }
 .detail-native { font-size: 0.8rem; color: var(--muted); font-style: italic; margin-bottom: 0.6rem; }
 .detail-genre-tags { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
-.dg-tag { background: rgba(232,109,176,0.12); border: 1px solid rgba(232,109,176,0.3); color: var(--accent); border-radius: 20px; padding: 2px 10px; font-size: 0.75rem; font-weight: 500; }
+.dg-tag { background: rgba(232,109,176,0.12); border: 1px solid rgba(232,109,176,0.3); color: var(--accent); border-radius: 20px; padding: 2px 10px; font-size: 0.75rem; font-weight: 600; }
 .detail-desc { font-size: 0.83rem; color: var(--muted); line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 .detail-stats {
   display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem 1.5rem;
   margin-top: 0.85rem;
 }
 .ds { font-size: 0.78rem; color: var(--muted); }
-.ds strong { color: var(--text); font-weight: 600; }
+.ds strong { color: var(--text); font-weight: 700; }
 
 /* SEASONS */
 .seasons-wrap { margin-top: 1.25rem; }
-.seasons-wrap h3 { font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.4rem; }
+.seasons-wrap h3 { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.4rem; }
 .seasons-row { display: flex; gap: 0.75rem; overflow-x: auto; scrollbar-width: none; }
 .seasons-row::-webkit-scrollbar { display: none; }
 .season-card {
@@ -553,11 +580,11 @@ nav {
   border-bottom: 1px solid var(--border);
   display: flex; align-items: center; justify-content: space-between;
 }
-.ep-sidebar-head h3 { font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+.ep-sidebar-head h3 { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); }
 .ep-filter-input {
   background: var(--card); border: 1px solid var(--border);
   border-radius: 6px; padding: 0.3rem 0.6rem;
-  color: var(--text); font-family: 'Outfit', sans-serif; font-size: 0.78rem;
+  color: var(--text); font-family: var(--font-body); font-size: 0.78rem; font-weight: 500;
   outline: none; width: 130px; transition: border-color 0.15s;
 }
 .ep-filter-input:focus { border-color: var(--accent); }
@@ -565,7 +592,7 @@ nav {
 .ep-page-btn {
   background: var(--card); border: 1px solid var(--border);
   color: var(--muted); border-radius: 5px; padding: 0.2rem 0.6rem;
-  font-size: 0.75rem; cursor: pointer; transition: all 0.15s;
+  font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: all 0.15s;
 }
 .ep-page-btn:hover, .ep-page-btn.active { border-color: var(--accent); color: var(--accent); }
 .ep-scroll { height: calc(100vh - var(--nav-h) - 200px); overflow-y: auto; padding: 0.5rem; }
@@ -582,40 +609,40 @@ nav {
 .ep-thumb-num {
   position: absolute; bottom: 3px; left: 3px;
   background: rgba(13,13,18,0.85); border-radius: 3px;
-  padding: 0px 5px; font-size: 0.68rem; font-weight: 700;
+  padding: 0px 5px; font-size: 0.68rem; font-weight: 800;
 }
 .ep-item-info { flex: 1; min-width: 0; }
-.ep-item-title { font-size: 0.82rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ep-item-title { font-size: 0.82rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ep-item-desc { font-size: 0.72rem; color: var(--muted); margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.4; }
 .ep-item-date { font-size: 0.68rem; color: var(--muted); margin-top: 4px; }
 
 /* RELATED SIDEBAR */
 .related-wrap { padding: 1rem; border-top: 1px solid var(--border); }
-.rel-title { font-size: 0.82rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.4rem; }
+.rel-title { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.4rem; }
 .rel-title::before { content: '›'; color: var(--accent); }
 .rel-item { display: flex; gap: 0.6rem; cursor: pointer; padding: 0.35rem; border-radius: 6px; transition: background 0.15s; margin-bottom: 4px; }
 .rel-item:hover { background: var(--card); }
 .rel-thumb { width: 56px; height: 78px; object-fit: cover; border-radius: 5px; background: var(--border); flex-shrink: 0; }
 .rel-info { flex: 1; min-width: 0; padding-top: 2px; }
-.rel-name { font-size: 0.82rem; font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.rel-name { font-size: 0.82rem; font-weight: 700; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .rel-live { display: inline-block; width: 6px; height: 6px; background: #4ade80; border-radius: 50%; margin-right: 3px; }
-.rel-meta { font-size: 0.7rem; color: var(--muted); margin-top: 3px; }
+.rel-meta { font-size: 0.7rem; color: var(--muted); margin-top: 3px; font-weight: 500; }
 
 /* COMMENTS */
 .comments-wrap { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border); }
 .comments-hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
-.comments-hd h3 { font-size: 1rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; }
+.comments-hd h3 { font-size: 1rem; font-weight: 800; display: flex; align-items: center; gap: 0.5rem; letter-spacing: -0.01em; }
 .comment-tabs { display: flex; gap: 0.5rem; }
-.ctab { background: var(--surface); border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 0.3rem 0.85rem; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+.ctab { background: var(--surface); border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 0.3rem 0.85rem; font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: all 0.15s; font-family: var(--font-body); }
 .ctab.active { border-color: var(--accent); color: #fff; background: var(--accent); }
 
 .comment-form { display: flex; gap: 0.75rem; margin-bottom: 1.25rem; }
-.comment-avatar { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--accent2)); display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: 700; color: #fff; flex-shrink: 0; }
+.comment-avatar { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--accent2)); display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: 800; color: #fff; flex-shrink: 0; }
 .comment-input-wrap { flex: 1; }
 .comment-input-wrap textarea {
   width: 100%; background: var(--surface); border: 1px solid var(--border);
   border-radius: 8px; padding: 0.6rem 0.9rem; color: var(--text);
-  font-family: 'Outfit', sans-serif; font-size: 0.88rem; resize: none; outline: none;
+  font-family: var(--font-body); font-size: 0.88rem; resize: none; outline: none;
   min-height: 60px; transition: border-color 0.2s; line-height: 1.5;
 }
 .comment-input-wrap textarea:focus { border-color: var(--accent); }
@@ -623,23 +650,31 @@ nav {
 .comment-submit-row { display: flex; justify-content: flex-end; margin-top: 0.4rem; }
 .comment-submit {
   background: var(--accent); color: #fff; border: none;
-  border-radius: 6px; padding: 0.4rem 1.1rem; font-family: 'Outfit', sans-serif;
-  font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
+  border-radius: 6px; padding: 0.4rem 1.1rem; font-family: var(--font-body);
+  font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: all 0.2s;
 }
 .comment-submit:hover { background: var(--blossom2); }
 .comment-login-prompt { text-align: center; padding: 1rem; color: var(--muted); font-size: 0.88rem; }
-.comment-login-prompt a { color: var(--accent); cursor: pointer; text-decoration: underline; }
+.comment-login-prompt a { color: var(--accent); cursor: pointer; text-decoration: underline; font-weight: 600; }
 .comments-list { display: flex; flex-direction: column; gap: 1rem; }
 .comment-item { display: flex; gap: 0.75rem; }
-.comment-item-avatar { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg, #7b68ee, #9b59b6); display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700; color: #fff; flex-shrink: 0; }
+.comment-item-avatar { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg, #7b68ee, #9b59b6); display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 800; color: #fff; flex-shrink: 0; }
 .comment-body { flex: 1; }
 .comment-meta { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; }
-.comment-user { font-size: 0.83rem; font-weight: 700; }
+.comment-user { font-size: 0.83rem; font-weight: 800; }
 .comment-time { font-size: 0.72rem; color: var(--muted); }
 .comment-text { font-size: 0.85rem; line-height: 1.6; }
 .comment-actions { display: flex; gap: 0.75rem; margin-top: 0.35rem; }
-.ca-btn { background: none; border: none; color: var(--muted); font-size: 0.75rem; cursor: pointer; display: flex; align-items: center; gap: 0.25rem; transition: color 0.15s; }
+.ca-btn { background: none; border: none; color: var(--muted); font-size: 0.75rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.25rem; transition: color 0.15s; font-family: var(--font-body); }
 .ca-btn:hover { color: var(--accent); }
+
+/* Comments error/notice */
+.comments-notice {
+  background: rgba(232,109,176,0.08); border: 1px solid rgba(232,109,176,0.2);
+  border-radius: 8px; padding: 0.75rem 1rem; font-size: 0.82rem; color: var(--muted);
+  margin-bottom: 0.75rem; line-height: 1.5;
+}
+.comments-notice a { color: var(--accent); text-decoration: underline; cursor: pointer; }
 
 /* ── AUTH MODAL ──────────────────────────────────────────────────── */
 .modal-overlay {
@@ -656,25 +691,29 @@ nav {
 @keyframes modalIn { from{transform:scale(0.95);opacity:0} to{transform:scale(1);opacity:1} }
 .modal-close { position: absolute; top: 1rem; right: 1rem; background: none; border: none; color: var(--muted); font-size: 1.2rem; cursor: pointer; transition: color 0.15s; }
 .modal-close:hover { color: var(--text); }
-.modal-logo { text-align: center; margin-bottom: 1.25rem; }
-.modal-logo span { font-family: 'Playfair Display', serif; font-size: 1.6rem; font-weight: 900; background: linear-gradient(135deg, #ffb7d5, #e86db0); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-.modal-title { font-size: 1.1rem; font-weight: 700; text-align: center; margin-bottom: 1.5rem; }
+.modal-logo {
+  text-align: center; margin-bottom: 1.25rem;
+  display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+}
+.modal-logo img { width: 28px; height: 28px; }
+.modal-logo span { font-family: var(--font-display); font-size: 1.6rem; font-weight: 900; background: linear-gradient(135deg, #ffb7d5, #e86db0); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.modal-title { font-size: 1.1rem; font-weight: 800; text-align: center; margin-bottom: 1.5rem; }
 .modal-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 1.25rem; }
-.modal-tab { flex: 1; text-align: center; background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); font-family: 'Outfit', sans-serif; font-size: 0.9rem; font-weight: 600; padding: 0.5rem; cursor: pointer; transition: all 0.15s; margin-bottom: -1px; }
+.modal-tab { flex: 1; text-align: center; background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); font-family: var(--font-body); font-size: 0.9rem; font-weight: 700; padding: 0.5rem; cursor: pointer; transition: all 0.15s; margin-bottom: -1px; }
 .modal-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 .form-group { margin-bottom: 0.85rem; }
-.form-group label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--muted); margin-bottom: 0.35rem; }
+.form-group label { display: block; font-size: 0.8rem; font-weight: 700; color: var(--muted); margin-bottom: 0.35rem; text-transform: uppercase; letter-spacing: 0.5px; }
 .form-group input {
   width: 100%; background: var(--surface); border: 1px solid var(--border);
   border-radius: 7px; padding: 0.55rem 0.9rem; color: var(--text);
-  font-family: 'Outfit', sans-serif; font-size: 0.9rem; outline: none;
+  font-family: var(--font-body); font-size: 0.9rem; outline: none;
   transition: border-color 0.2s;
 }
 .form-group input:focus { border-color: var(--accent); }
 .modal-submit {
   width: 100%; background: var(--accent); color: #fff; border: none;
-  border-radius: 8px; padding: 0.65rem; font-family: 'Outfit', sans-serif;
-  font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-top: 0.5rem;
+  border-radius: 8px; padding: 0.65rem; font-family: var(--font-body);
+  font-size: 0.95rem; font-weight: 700; cursor: pointer; transition: all 0.2s; margin-top: 0.5rem;
 }
 .modal-submit:hover { background: var(--blossom2); }
 .modal-error { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: #ef4444; border-radius: 6px; padding: 0.5rem 0.75rem; font-size: 0.82rem; margin-bottom: 0.75rem; display: none; }
@@ -687,7 +726,7 @@ nav {
   flex-wrap: wrap;
 }
 .server-label {
-  font-size: 0.75rem; font-weight: 700; letter-spacing: 1px;
+  font-size: 0.72rem; font-weight: 800; letter-spacing: 0.8px;
   color: var(--muted); text-transform: uppercase; flex-shrink: 0;
 }
 .server-group { display: flex; gap: 0.4rem; flex-wrap: wrap; }
@@ -695,7 +734,7 @@ nav {
   display: flex; align-items: center; gap: 0.4rem;
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 7px; padding: 0.35rem 0.85rem;
-  font-family: 'Outfit', sans-serif; font-size: 0.8rem; font-weight: 600;
+  font-family: var(--font-body); font-size: 0.8rem; font-weight: 700;
   color: var(--muted); cursor: pointer; transition: all 0.18s;
   white-space: nowrap;
 }
@@ -715,7 +754,7 @@ nav {
 }
 .dub-btn {
   background: none; border: none; padding: 0.35rem 0.8rem;
-  font-family: 'Outfit', sans-serif; font-size: 0.78rem; font-weight: 700;
+  font-family: var(--font-body); font-size: 0.78rem; font-weight: 800;
   letter-spacing: 0.5px; color: var(--muted); cursor: pointer; transition: all 0.15s;
 }
 .dub-btn.active { background: var(--accent); color: #fff; }
@@ -729,7 +768,7 @@ nav {
   position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 999;
   background: var(--card); border: 1px solid var(--border);
   border-radius: 10px; padding: 0.75rem 1.25rem;
-  font-size: 0.88rem; box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  font-size: 0.88rem; font-weight: 600; box-shadow: 0 4px 20px rgba(0,0,0,0.4);
   transform: translateY(20px); opacity: 0; transition: all 0.3s;
   pointer-events: none;
 }
@@ -758,8 +797,11 @@ nav {
 <!-- MAINTENANCE OVERLAY -->
 <div id="maintenance-overlay">
   <div class="maint-petals" id="maintPetals"></div>
-  <div class="maint-blossom-icon">🌸</div>
-  <div class="maint-logo">🌸 AniBlossom</div>
+  <img class="maint-blossom-icon"
+    src="https://raw.githubusercontent.com/AniBlossom/AniBlossom/main/icons/AniBlossom.svg"
+    alt="AniBlossom"
+    onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span style=\'font-size:3rem\'>🌸</span>')">
+  <div class="maint-logo">AniBlossom</div>
   <div class="maint-title">We're tending to the blossoms...</div>
   <p class="maint-sub">AniBlossom is currently undergoing scheduled maintenance. We'll be back in full bloom very soon — thank you for your patience! 🌸</p>
   <div class="maint-bar"><div class="maint-bar-fill"></div></div>
@@ -775,7 +817,13 @@ nav {
 
 <!-- NAV -->
 <nav>
-  <div class="logo" onclick="showHome()"><span class="logo-icon">🌸</span> AniBlossom</div>
+  <div class="logo" onclick="showHome()">
+    <img class="logo-img"
+      src="https://raw.githubusercontent.com/AniBlossom/AniBlossom/main/icons/AniBlossom.svg"
+      alt="AniBlossom"
+      onerror="this.style.display='none'">
+    AniBlossom
+  </div>
   <div class="nav-search">
     <span class="search-icon">🔍</span>
     <input type="text" id="searchInput" placeholder="Search Anime..." autocomplete="off">
@@ -838,7 +886,7 @@ nav {
       <!-- History -->
       <div class="history-bar" id="historySection" style="display:none">
         <div class="section-hd">
-          <h2>📺 Watch History</h2>
+          <h2>Your Watchlist<strong>Watch History</strong></h2>
           <span class="see-all" onclick="clearHistory()">Clear All</span>
         </div>
         <div class="hist-row" id="histRow"></div>
@@ -942,7 +990,12 @@ nav {
 <div class="modal-overlay" id="authModal">
   <div class="modal">
     <button class="modal-close" onclick="closeAuthModal()">✕</button>
-    <div class="modal-logo"><span>🌸 AniBlossom</span></div>
+    <div class="modal-logo">
+      <img src="https://raw.githubusercontent.com/AniBlossom/AniBlossom/main/icons/AniBlossom.svg"
+        alt="AniBlossom" width="28" height="28"
+        onerror="this.style.display='none'">
+      <span>AniBlossom</span>
+    </div>
     <div class="modal-tabs">
       <button class="modal-tab active" id="mtab-login" onclick="switchAuthTab('login')">Log In</button>
       <button class="modal-tab" id="mtab-register" onclick="switchAuthTab('register')">Sign Up</button>
@@ -966,6 +1019,30 @@ nav {
 <div class="toast" id="toast"></div>
 
 <script>
+// ── PROVIDERS ─────────────────────────────────────────────────────
+const PROVIDERS = [
+  {
+    id: "filmu",
+    name: "FilmU",
+    supportsAudio: false, // sub only, no toggle
+    getUrl: (anilistId, season, episode, audio) => {
+      return `https://embed.filmu.in/anime/${anilistId}/${season}/${episode}`;
+    }
+  },
+  {
+    id: "animplay",
+    name: "AnimPlay",
+    supportsAudio: true, // sub & dub
+    getUrl: (anilistId, season, episode, audio = "sub") => {
+      return `https://animeplay.cfd/stream/ani/${anilistId}/${episode}/${audio}`;
+    }
+  }
+];
+
+function getProvider(id) {
+  return PROVIDERS.find(p => p.id === id) || PROVIDERS[0];
+}
+
 // ── AniList ──────────────────────────────────────────────────────
 const AL = 'https://graphql.anilist.co';
 const FIELDS = `id title{romaji english native} coverImage{large extraLarge} bannerImage description(asHtml:false) episodes averageScore genres status startDate{year} format studios{nodes{name}} nextAiringEpisode{episode}`;
@@ -975,15 +1052,12 @@ async function gql(query, vars={}) {
   return (await r.json()).data;
 }
 
-const Q = (sort, extra='') => `query($p:Int,$g:String){Page(page:$p,perPage:20){media(type:ANIME,sort:${sort},isAdult:false${extra ? ','+extra : ''}){${FIELDS}}}}`;
-
 async function fetchList(tab, page, genre) {
   const g = genre ? `,genre_in:["${genre}"]` : '';
   let sort;
   if (tab==='newest') sort = 'START_DATE_DESC';
   else if (tab==='popular') sort = 'POPULARITY_DESC';
   else sort = 'SCORE_DESC';
-  const extra = genre ? `genre_in:["${genre}"]` : '';
   const query = `query($p:Int){Page(page:$p,perPage:20){media(type:ANIME,sort:${sort},isAdult:false${g}){${FIELDS}}}}`;
   return gql(query, {p:page});
 }
@@ -997,15 +1071,15 @@ async function fetchSearch(q) {
   return gql(`query($q:String){Page(perPage:8){media(type:ANIME,search:$q,isAdult:false){${FIELDS}}}}`, {q});
 }
 async function fetchRelated(id) {
-  return gql(`query($id:Int){Media(id:$id){recommendations(perPage:6){nodes{mediaRecommendation{id title{romaji english} coverImage{large} episodes averageScore status format}}}}}`  ,{id});
+  return gql(`query($id:Int){Media(id:$id){recommendations(perPage:6){nodes{mediaRecommendation{id title{romaji english} coverImage{large} episodes averageScore status format}}}}}`,{id});
 }
 
 // ── State ────────────────────────────────────────────────────────
 let heroList = [], currentHeroIdx = 0, heroTimer = null;
 let currentTab = 'newest', currentPage = 1, currentGenre = null;
 let currentAnime = null, currentEp = 1, currentSeason = 1, totalEps = 0;
-let currentServer = 'filmu'; // 'filmu' | 'animplay'
-let currentDub = 'sub';      // 'sub' | 'dub'
+let currentServer = 'filmu';
+let currentDub = 'sub';
 let epPageSize = 20, epPageCurrent = 0;
 let allEpItems = [];
 let commentsUnsub = null;
@@ -1042,7 +1116,6 @@ function removeHistory(id) {
 function openFromHistory(i) {
   const h = getHistory()[i];
   if (!h) return;
-  // Fetch full anime data then open
   gql(`query($id:Int){Media(id:$id){${FIELDS}}}`,{id:h.id}).then(d => {
     if (d.Media) openWatch(d.Media, h.ep);
   });
@@ -1180,13 +1253,15 @@ function openWatch(anime, ep=1) {
   currentEp = ep;
   currentSeason = 1;
   totalEps = anime.episodes || 24;
-  // Reset server UI to FilmU on new anime open
+
+  // Reset server state
   currentServer = 'filmu';
   currentDub = 'sub';
   document.getElementById('srv-filmu').classList.add('active');
   document.getElementById('srv-animplay').classList.remove('active');
   document.getElementById('dub-sub').classList.add('active');
   document.getElementById('dub-dub').classList.remove('active');
+  // FilmU is sub-only, hide dub toggle
   document.getElementById('dubToggle').style.display = 'none';
 
   showWatch();
@@ -1199,21 +1274,16 @@ function openWatch(anime, ep=1) {
 }
 
 function buildEmbedUrl(server, anilistId, season, ep, dub) {
-  if (server === 'animplay') {
-    // AnimPlay: https://play.animatedhaven.com/anime/{anilist_id}?ep={ep}&dub={0|1}
-    const dubParam = dub === 'dub' ? 1 : 0;
-    return `https://play.animatedhaven.com/anime/${anilistId}?ep=${ep}&dub=${dubParam}`;
-  }
-  // Default: FilmU
-  return `https://embed.filmu.in/anime/${anilistId}/${season}/${ep}`;
+  const provider = getProvider(server);
+  return provider.getUrl(anilistId, season, ep, dub);
 }
 
 function loadPlayer(season, ep) {
   const url = buildEmbedUrl(currentServer, currentAnime.id, season, ep, currentDub);
   document.getElementById('playerIframe').src = url;
-  // Show/hide dub toggle — AnimPlay supports sub/dub, FilmU is sub only
-  const dubToggle = document.getElementById('dubToggle');
-  dubToggle.style.display = currentServer === 'animplay' ? 'flex' : 'none';
+  // AnimPlay supports sub/dub; FilmU is sub only
+  const provider = getProvider(currentServer);
+  document.getElementById('dubToggle').style.display = provider.supportsAudio ? 'flex' : 'none';
 }
 
 function switchServer(server) {
@@ -1221,7 +1291,8 @@ function switchServer(server) {
   document.getElementById('srv-filmu').classList.toggle('active', server === 'filmu');
   document.getElementById('srv-animplay').classList.toggle('active', server === 'animplay');
   loadPlayer(currentSeason, currentEp);
-  showToast(server === 'animplay' ? 'Switched to AnimPlay 🎌' : 'Switched to FilmU 🎬', 'success');
+  const provider = getProvider(server);
+  showToast(`Switched to ${provider.name} ${server === 'animplay' ? '🎌' : '🎬'}`, 'success');
 }
 
 function switchDub(type) {
@@ -1342,6 +1413,8 @@ async function loadRelated(id) {
 }
 
 // ── Comments ──────────────────────────────────────────────────────
+// Fixed: use getDocs (non-realtime) with only a 'where' clause to avoid needing a composite index.
+// We sort client-side so no composite index (key + createdAt) is required in Firestore.
 function renderComments(animeId, ep) {
   const wrap = document.getElementById('commentsWrap');
   if (commentsUnsub) { commentsUnsub(); commentsUnsub = null; }
@@ -1356,13 +1429,12 @@ function renderComments(animeId, ep) {
     <div class="comments-hd">
       <h3>💬 Comments</h3>
       <div class="comment-tabs">
-        <button class="ctab active">ANIME</button>
-        <button class="ctab">EP ${ep}</button>
+        <button class="ctab active">Episode ${ep}</button>
       </div>
     </div>
     ${user ? `
     <div class="comment-form">
-      <div class="comment-avatar">${user.displayName?user.displayName[0].toUpperCase():'A'}</div>
+      <div class="comment-avatar">${user.displayName?escHtml(user.displayName[0].toUpperCase()):'A'}</div>
       <div class="comment-input-wrap">
         <textarea id="commentTextarea" placeholder="Share your thoughts on this episode..."></textarea>
         <div class="comment-submit-row">
@@ -1373,41 +1445,70 @@ function renderComments(animeId, ep) {
     <div class="comment-login-prompt">
       <a onclick="openAuthModal('login')">Log in</a> or <a onclick="openAuthModal('register')">sign up</a> to leave a comment.
     </div>`}
-    <div class="comments-list" id="commentsList"><div style="color:var(--muted);font-size:0.85rem">Loading comments...</div></div>`;
+    <div class="comments-list" id="commentsList"><div style="color:var(--muted);font-size:0.85rem;padding:0.5rem">Loading comments...</div></div>`;
 
-  // Real-time listener
+  // Use onSnapshot with only a where clause (no orderBy) to avoid composite index requirement.
+  // Sort client-side instead.
   try {
     const q = fb.query(
       fb.collection(fb.db, 'comments'),
-      fb.where('key','==',commentKey),
-      fb.orderBy('createdAt','desc')
+      fb.where('key', '==', commentKey)
     );
-    commentsUnsub = fb.onSnapshot(q, snap => {
-      const list = document.getElementById('commentsList');
-      if (!list) return;
-      if (snap.empty) { list.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;padding:0.5rem">No comments yet. Be the first!</div>'; return; }
-      list.innerHTML = snap.docs.map(d => {
-        const c = d.data();
-        const t = c.createdAt?.toDate ? timeAgo(c.createdAt.toDate()) : 'just now';
-        const initials = c.userName ? c.userName[0].toUpperCase() : 'A';
-        return `<div class="comment-item">
-          <div class="comment-item-avatar">${initials}</div>
-          <div class="comment-body">
-            <div class="comment-meta">
-              <span class="comment-user">${c.userName||'Anonymous'}</span>
-              <span class="comment-time">• ${t}</span>
+    commentsUnsub = fb.onSnapshot(q,
+      snap => {
+        const list = document.getElementById('commentsList');
+        if (!list) return;
+        if (snap.empty) {
+          list.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;padding:0.5rem">No comments yet. Be the first! 🌸</div>';
+          return;
+        }
+        // Sort client-side: newest first
+        const docs = snap.docs.slice().sort((a,b) => {
+          const ta = a.data().createdAt?.toMillis?.() || 0;
+          const tb = b.data().createdAt?.toMillis?.() || 0;
+          return tb - ta;
+        });
+        list.innerHTML = docs.map(d => {
+          const c = d.data();
+          const t = c.createdAt?.toDate ? timeAgo(c.createdAt.toDate()) : 'just now';
+          const initials = c.userName ? c.userName[0].toUpperCase() : 'A';
+          const hue = (c.userId||'').split('').reduce((acc,ch)=>acc+ch.charCodeAt(0),0) % 360;
+          return `<div class="comment-item">
+            <div class="comment-item-avatar" style="background:linear-gradient(135deg,hsl(${hue},60%,55%),hsl(${(hue+40)%360},60%,45%))">${escHtml(initials)}</div>
+            <div class="comment-body">
+              <div class="comment-meta">
+                <span class="comment-user">${escHtml(c.userName||'Anonymous')}</span>
+                <span class="comment-time">• ${t}</span>
+              </div>
+              <div class="comment-text">${escHtml(c.text)}</div>
+              <div class="comment-actions">
+                <button class="ca-btn">👍 ${c.likes||0}</button>
+                <button class="ca-btn">↩ Reply</button>
+              </div>
             </div>
-            <div class="comment-text">${escHtml(c.text)}</div>
-            <div class="comment-actions">
-              <button class="ca-btn">👍 ${c.likes||0}</button>
-              <button class="ca-btn">↩ Reply</button>
-            </div>
-          </div>
-        </div>`;
-      }).join('');
-    });
+          </div>`;
+        }).join('');
+      },
+      err => {
+        // Firestore error (e.g. missing index or permission denied)
+        const list = document.getElementById('commentsList');
+        if (!list) return;
+        if (err.code === 'failed-precondition' || err.message?.includes('index')) {
+          list.innerHTML = `<div class="comments-notice">
+            Comments require a Firestore index. Please
+            <a href="https://console.firebase.google.com/project/aniblossom-f0d34/firestore/indexes" target="_blank" rel="noopener">create the index here</a>,
+            then reload. If you just deployed, it may take a minute to build.
+          </div>`;
+        } else {
+          list.innerHTML = `<div style="color:var(--muted);font-size:0.85rem;padding:0.5rem">Could not load comments. Check Firestore rules.</div>`;
+          console.error('Comments error:', err);
+        }
+      }
+    );
   } catch(e) {
-    document.getElementById('commentsList').innerHTML = '<div style="color:var(--muted);font-size:0.85rem">Could not load comments.</div>';
+    const list = document.getElementById('commentsList');
+    if (list) list.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;padding:0.5rem">Could not load comments.</div>';
+    console.error('Comments setup error:', e);
   }
 }
 
@@ -1420,7 +1521,8 @@ async function postComment(key) {
   const fb = window.__fb;
   try {
     await fb.addDoc(fb.collection(fb.db,'comments'), {
-      key, text,
+      key,
+      text,
       userId: user.uid,
       userName: user.displayName || 'Anonymous',
       createdAt: fb.serverTimestamp(),
@@ -1428,7 +1530,14 @@ async function postComment(key) {
     });
     ta.value = '';
     showToast('Comment posted! 🌸', 'success');
-  } catch(e) { showToast('Failed to post comment.', 'error'); }
+  } catch(e) {
+    console.error('Post comment error:', e);
+    if (e.code === 'permission-denied') {
+      showToast('Permission denied. Check Firestore rules.', 'error');
+    } else {
+      showToast('Failed to post comment.', 'error');
+    }
+  }
 }
 
 // ── Views ─────────────────────────────────────────────────────────
@@ -1496,7 +1605,7 @@ window.updateAuthUI = function(user) {
   if (user) {
     const initials = user.displayName ? user.displayName[0].toUpperCase() : user.email[0].toUpperCase();
     nr.innerHTML = `
-      <button class="avatar-btn" title="${user.displayName||user.email}">${initials}</button>
+      <button class="avatar-btn" title="${escHtml(user.displayName||user.email)}">${escHtml(initials)}</button>
       <button class="nav-btn" onclick="doSignOut()">Sign Out</button>`;
   } else {
     nr.innerHTML = `
@@ -1577,7 +1686,7 @@ function showToast(msg, type='success') {
 
 // ── Util ──────────────────────────────────────────────────────────
 function stripHtml(s) { return s.replace(/<[^>]*>/g,'').replace(/&[^;]+;/g,' ').trim(); }
-function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function timeAgo(d) {
   const diff = (Date.now()-d)/1000;
   if (diff<60) return 'just now';
