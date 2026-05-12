@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KageShin — Anime Streaming</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#07090f;--bg2:#0d1117;--bg3:#141b27;--surface:#1a2235;--surface2:#202840;--accent:#e63946;--accent2:#ff6b6b;--text:#eef0f5;--muted:#7b8aaa;--border:rgba(255,255,255,0.07);--r:10px}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+
+/* HEADER */
+header{position:sticky;top:0;z-index:200;height:58px;display:flex;align-items:center;gap:1.25rem;padding:0 1.5rem;background:rgba(7,9,15,.92);backdrop-filter:blur(14px);border-bottom:1px solid var(--border)}
+.logo{font-family:'Bebas Neue',sans-serif;font-size:1.65rem;letter-spacing:.08em;color:var(--text);cursor:pointer;flex-shrink:0;user-select:none}
+.logo span{color:var(--accent)}
+.search-wrap{flex:1;max-width:460px;display:flex;background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+#searchInput{flex:1;background:none;border:none;outline:none;padding:.5rem 1rem;color:var(--text);font-family:'DM Sans',sans-serif;font-size:.88rem}
+#searchInput::placeholder{color:var(--muted)}
+#searchBtn{background:var(--accent);border:none;cursor:pointer;padding:0 .9rem;color:#fff;font-size:.95rem;transition:background .2s}
+#searchBtn:hover{background:var(--accent2)}
+.header-nav{display:flex;gap:.5rem;margin-left:auto}
+.nav-btn{background:none;border:none;cursor:pointer;color:var(--muted);font-size:.82rem;font-family:'DM Sans',sans-serif;padding:.35rem .75rem;border-radius:6px;transition:color .15s,background .15s;white-space:nowrap}
+.nav-btn:hover{color:var(--text);background:var(--surface)}
+.lang-toggle{display:flex;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:3px}
+.lang-btn{background:none;border:none;cursor:pointer;color:var(--muted);font-size:.75rem;font-family:'DM Sans',sans-serif;font-weight:500;padding:3px 8px;border-radius:4px;transition:all .15s}
+.lang-btn.active{background:var(--accent);color:#fff}
+
+/* HERO */
+.hero{position:relative;height:460px;overflow:hidden;display:flex;align-items:flex-end}
+.hero-bg{position:absolute;inset:0;background-size:cover;background-position:center top;filter:brightness(.38);transition:background-image .5s}
+.hero-grad{position:absolute;inset:0;background:linear-gradient(to top,var(--bg) 0%,transparent 55%),linear-gradient(to right,rgba(7,9,15,.93) 0%,transparent 55%)}
+.hero-content{position:relative;z-index:2;padding:2rem 2.5rem;max-width:560px}
+.hero-badge{display:inline-flex;align-items:center;gap:5px;background:var(--accent);color:#fff;font-size:.68rem;font-weight:500;letter-spacing:.12em;text-transform:uppercase;padding:3px 9px;border-radius:4px;margin-bottom:.65rem}
+.hero-score{font-size:.75rem;color:#ffd60a;margin-bottom:.4rem;min-height:1rem}
+.hero-title{font-family:'Bebas Neue',sans-serif;font-size:3rem;line-height:1;letter-spacing:.04em;margin-bottom:.6rem}
+.hero-desc{font-size:.84rem;color:rgba(238,240,245,.72);line-height:1.65;margin-bottom:1rem;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.genre-row{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:1rem}
+.genre-pill{font-size:.7rem;padding:3px 9px;border-radius:20px;border:1px solid var(--border);color:var(--muted)}
+.hero-actions{display:flex;gap:.65rem;flex-wrap:wrap}
+.btn-primary{display:flex;align-items:center;gap:7px;background:var(--accent);color:#fff;border:none;cursor:pointer;padding:.6rem 1.4rem;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:.88rem;font-weight:500;transition:background .2s,transform .1s}
+.btn-primary:hover{background:var(--accent2);transform:translateY(-1px)}
+.btn-secondary{display:flex;align-items:center;gap:7px;background:rgba(255,255,255,.1);color:var(--text);border:1px solid var(--border);cursor:pointer;padding:.6rem 1.4rem;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:.88rem;font-weight:500;transition:background .2s}
+.btn-secondary:hover{background:rgba(255,255,255,.16)}
+.hero-dots{position:absolute;bottom:.9rem;right:1.8rem;display:flex;gap:6px;z-index:3}
+.hero-dot{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.3);cursor:pointer;border:none;transition:background .2s,width .25s,border-radius .25s}
+.hero-dot.active{background:var(--accent);width:22px;border-radius:4px}
+
+/* SECTIONS */
+.home-section{padding:2.25rem 2rem 0}
+.section-header{display:flex;align-items:baseline;gap:.75rem;margin-bottom:1.1rem}
+.section-title{font-family:'Bebas Neue',sans-serif;font-size:1.4rem;letter-spacing:.06em}
+.section-title span{color:var(--accent)}
+.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:.9rem}
+
+/* CARDS */
+.anime-card{cursor:pointer;border-radius:var(--r);overflow:hidden;background:var(--bg2);transition:transform .2s,box-shadow .2s;position:relative}
+.anime-card:hover{transform:translateY(-4px);box-shadow:0 14px 36px rgba(0,0,0,.55)}
+.anime-card:hover .card-overlay{opacity:1}
+.card-poster{width:100%;aspect-ratio:2/3;object-fit:cover;display:block;background:var(--surface)}
+.card-overlay{position:absolute;inset:0;background:rgba(230,57,70,.65);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s;font-size:2.4rem}
+.card-info{padding:.55rem .7rem}
+.card-title{font-size:.79rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
+.card-meta{font-size:.7rem;color:var(--muted)}
+.card-score{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.72);backdrop-filter:blur(4px);color:#ffd60a;font-size:.69rem;font-weight:500;padding:2px 6px;border-radius:4px}
+
+/* CONTINUE WATCHING */
+.cw-strip{display:flex;gap:.75rem;overflow-x:auto;padding-bottom:.5rem;scrollbar-width:none}
+.cw-strip::-webkit-scrollbar{display:none}
+.cw-card{flex-shrink:0;width:160px;cursor:pointer;border-radius:var(--r);overflow:hidden;background:var(--bg2);border:1px solid var(--border);transition:transform .2s}
+.cw-card:hover{transform:translateY(-3px)}
+.cw-thumb{width:100%;height:90px;object-fit:cover;display:block;background:var(--surface)}
+.cw-prog{height:3px;background:var(--surface2)}
+.cw-prog-bar{height:100%;background:var(--accent)}
+.cw-info{padding:.45rem .6rem}
+.cw-title{font-size:.73rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cw-ep{font-size:.67rem;color:var(--muted)}
+
+/* WATCH */
+#watchView{display:none}
+.watch-layout{display:grid;grid-template-columns:1fr 310px;min-height:calc(100vh - 58px)}
+.watch-main{border-right:1px solid var(--border);overflow:hidden}
+.player-wrap{position:relative;width:100%;aspect-ratio:16/9;background:#000}
+.player-wrap iframe{position:absolute;inset:0;width:100%;height:100%;border:none}
+.watch-info{padding:1.25rem 1.75rem}
+.back-btn{display:flex;align-items:center;gap:5px;background:none;border:none;cursor:pointer;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:.82rem;padding:0 0 .75rem;transition:color .2s}
+.back-btn:hover{color:var(--text)}
+.watch-title{font-family:'Bebas Neue',sans-serif;font-size:1.9rem;letter-spacing:.04em;margin-bottom:.2rem}
+.ep-label{font-size:.85rem;color:var(--muted);margin-bottom:.9rem}
+.watch-meta-row{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:1rem}
+.badge{font-size:.69rem;font-weight:500;padding:3px 8px;border-radius:4px;background:var(--surface2);color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+.badge.red{background:rgba(230,57,70,.18);color:var(--accent2)}
+.server-label{font-size:.74rem;color:var(--muted);margin-bottom:.4rem}
+.server-row{display:flex;gap:.45rem;flex-wrap:wrap;margin-bottom:1rem}
+.server-btn{background:var(--surface);border:1px solid var(--border);cursor:pointer;color:var(--muted);font-size:.74rem;font-family:'DM Sans',sans-serif;padding:.3rem .75rem;border-radius:6px;transition:all .15s}
+.server-btn:hover,.server-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.watch-desc{font-size:.84rem;color:rgba(238,240,245,.68);line-height:1.7;max-height:88px;overflow:hidden}
+.watch-desc.exp{max-height:none}
+.read-more{background:none;border:none;cursor:pointer;color:var(--accent);font-size:.78rem;font-family:'DM Sans',sans-serif;padding:.3rem 0 0;display:none}
+
+/* SIDEBAR */
+.sidebar{background:var(--bg2);display:flex;flex-direction:column}
+.sidebar-header{padding:.9rem 1.1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.sidebar-title{font-family:'Bebas Neue',sans-serif;font-size:1.05rem;letter-spacing:.05em}
+.ep-count{font-size:.74rem;color:var(--muted)}
+.ep-search{width:100%;background:var(--surface);border:none;border-bottom:1px solid var(--border);outline:none;padding:.6rem 1.1rem;color:var(--text);font-family:'DM Sans',sans-serif;font-size:.8rem;flex-shrink:0}
+.ep-search::placeholder{color:var(--muted)}
+.ep-list{overflow-y:auto;flex:1;scrollbar-width:thin;scrollbar-color:var(--surface2) transparent;max-height:calc(100vh - 160px)}
+.ep-item{display:flex;align-items:center;gap:.65rem;padding:.65rem 1.1rem;cursor:pointer;border-bottom:1px solid var(--border);transition:background .12s}
+.ep-item:hover{background:var(--surface)}
+.ep-item.active{background:rgba(230,57,70,.1);border-left:3px solid var(--accent);padding-left:calc(1.1rem - 3px)}
+.ep-num{font-family:'Bebas Neue',sans-serif;font-size:1.05rem;color:var(--muted);min-width:26px;text-align:center}
+.ep-item.active .ep-num{color:var(--accent)}
+.ep-info{flex:1;min-width:0}
+.ep-name{font-size:.79rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ep-sub{font-size:.67rem;color:var(--muted)}
+.ep-playing{font-size:.65rem;color:var(--accent);font-weight:500}
+
+/* SEARCH */
+#searchView{display:none;padding:2rem 2rem 3rem}
+.search-heading{font-family:'Bebas Neue',sans-serif;font-size:1.7rem;letter-spacing:.05em;margin-bottom:1.4rem}
+.search-heading em{font-family:'DM Sans',sans-serif;font-size:.9rem;font-weight:300;font-style:normal;letter-spacing:0;color:var(--muted)}
+
+/* SKELETONS */
+.skeleton{background:linear-gradient(90deg,var(--surface) 25%,var(--surface2) 50%,var(--surface) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:var(--r)}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.loader{display:flex;align-items:center;justify-content:center;padding:4rem;color:var(--muted);gap:.75rem;font-size:.88rem}
+.spinner{width:18px;height:18px;border:2px solid var(--surface2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+footer{text-align:center;padding:2rem;color:var(--muted);font-size:.74rem;border-top:1px solid var(--border);margin-top:3rem}
+
+@media(max-width:860px){
+  .watch-layout{grid-template-columns:1fr}
+  .ep-list{max-height:340px}
+  .header-nav{display:none}
+  .hero{height:380px}
+  .hero-content{padding:1.25rem 1.25rem 1.75rem}
+  .hero-title{font-size:2.1rem}
+  .home-section{padding:1.75rem 1rem 0}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo" onclick="showHome()"><span>KAGE</span>SHIN</div>
+  <div class="search-wrap">
+    <input id="searchInput" type="text" placeholder="Search anime..." autocomplete="off">
+    <button id="searchBtn" onclick="doSearch()">🔍</button>
+  </div>
+  <nav class="header-nav">
+    <button class="nav-btn" onclick="loadSection('trending')">Trending</button>
+    <button class="nav-btn" onclick="loadSection('popular')">Popular</button>
+    <button class="nav-btn" onclick="loadSection('season')">This Season</button>
+  </nav>
+  <div class="lang-toggle">
+    <button class="lang-btn active" id="btnSub" onclick="setLang('sub')">SUB</button>
+    <button class="lang-btn" id="btnDub" onclick="setLang('dub')">DUB</button>
+  </div>
+</header>
+
+<div id="app">
+
+  <!-- HOME -->
+  <div id="homeView">
+    <div class="hero">
+      <div class="hero-bg" id="heroBg"></div>
+      <div class="hero-grad"></div>
+      <div class="hero-content">
+        <div class="hero-badge">🔥 Trending Now</div>
+        <div class="hero-score" id="heroScore"></div>
+        <h1 class="hero-title" id="heroTitle">Loading...</h1>
+        <p class="hero-desc" id="heroDesc"></p>
+        <div class="genre-row" id="heroGenres"></div>
+        <div class="hero-actions">
+          <button class="btn-primary" onclick="heroPlay()">▶ Watch Now</button>
+          <button class="btn-secondary" onclick="heroInfo()">ⓘ More Info</button>
+        </div>
+      </div>
+      <div class="hero-dots" id="heroDots"></div>
+    </div>
+
+    <div id="cwSection" style="display:none">
+      <div class="home-section">
+        <div class="section-header"><h2 class="section-title">CONTINUE <span>WATCHING</span></h2></div>
+        <div class="cw-strip" id="cwStrip"></div>
+      </div>
+    </div>
+
+    <section class="home-section">
+      <div class="section-header"><h2 class="section-title"><span>▶</span> TRENDING</h2></div>
+      <div class="card-grid" id="trendingGrid">
+        <div class="skeleton" style="aspect-ratio:2/3"></div><div class="skeleton" style="aspect-ratio:2/3"></div>
+        <div class="skeleton" style="aspect-ratio:2/3"></div><div class="skeleton" style="aspect-ratio:2/3"></div>
+        <div class="skeleton" style="aspect-ratio:2/3"></div><div class="skeleton" style="aspect-ratio:2/3"></div>
+      </div>
+    </section>
+
+    <section class="home-section">
+      <div class="section-header"><h2 class="section-title">ALL TIME <span>POPULAR</span></h2></div>
+      <div class="card-grid" id="popularGrid">
+        <div class="skeleton" style="aspect-ratio:2/3"></div><div class="skeleton" style="aspect-ratio:2/3"></div>
+        <div class="skeleton" style="aspect-ratio:2/3"></div><div class="skeleton" style="aspect-ratio:2/3"></div>
+        <div class="skeleton" style="aspect-ratio:2/3"></div><div class="skeleton" style="aspect-ratio:2/3"></div>
+      </div>
+    </section>
+
+    <section class="home-section" style="padding-bottom:2.5rem">
+      <div class="section-header"><h2 class="section-title">THIS <span>SEASON</span></h2></div>
+      <div class="card-grid" id="seasonGrid">
+        <div class="skeleton" style="aspect-ratio:2/3"></div><div class="skeleton" style="aspect-ratio:2/3"></div>
+        <div class="skeleton" style="aspect-ratio:2/3"></div><div class="skeleton" style="aspect-ratio:2/3"></div>
+        <div class="skeleton" style="aspect-ratio:2/3"></div><div class="skeleton" style="aspect-ratio:2/3"></div>
+      </div>
+    </section>
+    <footer>KageShin · Powered by AniList &amp; MegaPlay · For personal use only</footer>
+  </div>
+
+  <!-- WATCH -->
+  <div id="watchView">
+    <div class="watch-layout">
+      <div class="watch-main">
+        <div class="player-wrap">
+          <iframe id="playerFrame" allowfullscreen allow="autoplay; fullscreen; picture-in-picture" referrerpolicy="no-referrer"></iframe>
+        </div>
+        <div class="watch-info">
+          <button class="back-btn" onclick="showHome()">← Back to home</button>
+          <h1 class="watch-title" id="watchTitle">—</h1>
+          <p class="ep-label" id="watchEpLabel">Episode —</p>
+          <div class="watch-meta-row" id="watchMeta"></div>
+          <div class="server-label">Server</div>
+          <div class="server-row" id="serverRow"></div>
+          <div class="watch-desc" id="watchDesc"></div>
+          <button class="read-more" id="readMoreBtn" onclick="toggleDesc()">Read more ▾</button>
+        </div>
+      </div>
+      <div class="sidebar">
+        <div class="sidebar-header">
+          <span class="sidebar-title">EPISODES</span>
+          <span class="ep-count" id="epCount"></span>
+        </div>
+        <input class="ep-search" id="epSearch" placeholder="Jump to episode..." oninput="filterEps(this.value)">
+        <div class="ep-list" id="epList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SEARCH -->
+  <div id="searchView">
+    <h2 class="search-heading" id="searchHeading">Results</h2>
+    <div class="card-grid" id="searchGrid"></div>
+  </div>
+
+</div>
+
+<script>
+// ── GLOBALS ────────────────────────────────────────────────────────────────
+const ANILIST = 'https://graphql.anilist.co';
+let heroAnime = [], heroIdx = 0, heroTimer = null;
+let currentAnime = null, currentEp = 1, currentLang = 'sub';
+let currentServers = [], currentServerIdx = 0;
+
+// ── LOCAL STORAGE (continue watching) ─────────────────────────────────────
+function getCW() {
+  try { return JSON.parse(localStorage.getItem('kageshin_cw') || '{}'); } catch(e) { return {}; }
+}
+function saveCW(anime, ep) {
+  try {
+    const cw = getCW();
+    const id = String(anime.id);
+    cw[id] = { id: anime.id, ep, title: anime.title.english || anime.title.romaji, poster: anime.coverImage.large, totalEps: anime.episodes || 12 };
+    const keys = Object.keys(cw);
+    if (keys.length > 12) delete cw[keys[0]];
+    localStorage.setItem('kageshin_cw', JSON.stringify(cw));
+    renderCW();
+  } catch(e) {}
+}
+
+function renderCW() {
+  const cw = getCW();
+  const keys = Object.keys(cw);
+  if (!keys.length) { document.getElementById('cwSection').style.display = 'none'; return; }
+  document.getElementById('cwSection').style.display = 'block';
+  const strip = document.getElementById('cwStrip');
+  strip.innerHTML = '';
+  [...keys].reverse().forEach(id => {
+    const item = cw[id];
+    const pct = Math.min(100, Math.round((item.ep / item.totalEps) * 100));
+    const div = document.createElement('div');
+    div.className = 'cw-card';
+    div.innerHTML = `
+      <img class="cw-thumb" src="${item.poster}" loading="lazy" alt="${item.title}">
+      <div class="cw-prog"><div class="cw-prog-bar" style="width:${pct}%"></div></div>
+      <div class="cw-info">
+        <div class="cw-title">${item.title}</div>
+        <div class="cw-ep">Ep ${item.ep} · ${pct}%</div>
+      </div>`;
+    div.onclick = () => {
+      const stub = { id: parseInt(id), title: { english: item.title, romaji: item.title }, coverImage: { large: item.poster, extraLarge: item.poster }, episodes: item.totalEps, description: '', genres: [], averageScore: null, format: '', status: '', season: '', seasonYear: '', bannerImage: '' };
+      openAnime(stub, item.ep);
+    };
+    strip.appendChild(div);
+  });
+}
+
+// ── LANG TOGGLE ───────────────────────────────────────────────────────────
+function setLang(l) {
+  currentLang = l;
+  document.getElementById('btnSub').classList.toggle('active', l === 'sub');
+  document.getElementById('btnDub').classList.toggle('active', l === 'dub');
+  if (currentAnime) applyServer();
+}
+
+// ── ANILIST ───────────────────────────────────────────────────────────────
+async function aniQuery(query, variables = {}) {
+  const r = await fetch(ANILIST, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify({ query, variables }) });
+  return (await r.json()).data;
+}
+const F = `id title{romaji english}coverImage{extraLarge large}bannerImage description episodes averageScore genres status format season seasonYear`;
+const QTrending = `{Page(perPage:20){media(sort:TRENDING_DESC,type:ANIME,isAdult:false){${F}}}}`;
+const QPopular  = `{Page(perPage:12){media(sort:POPULARITY_DESC,type:ANIME,isAdult:false){${F}}}}`;
+const QSeason   = (s,y) => `{Page(perPage:12){media(season:${s},seasonYear:${y},type:ANIME,isAdult:false,sort:POPULARITY_DESC){${F}}}}`;
+const QSearch   = `query($q:String){Page(perPage:24){media(search:$q,type:ANIME,isAdult:false){${F}}}}`;
+
+function stripHtml(h) { const d = document.createElement('div'); d.innerHTML = h || ''; return d.textContent || ''; }
+function getSeason() {
+  const m = new Date().getMonth(), y = new Date().getFullYear();
+  return { s: ['WINTER','WINTER','SPRING','SPRING','SPRING','SUMMER','SUMMER','SUMMER','FALL','FALL','FALL','WINTER'][m], y };
+}
+
+// ── SERVERS ───────────────────────────────────────────────────────────────
+// megaplay.buzz is purpose-built for external embedding using AniList IDs
+function buildServers(aniId, ep, lang) {
+  return [
+    { name: 'Server 1', url: `https://megaplay.buzz/stream/ani/${aniId}/${ep}/${lang}` },
+    { name: 'Server 2', url: `https://megaplay.buzz/stream/ani/${aniId}/${ep}/${lang === 'sub' ? 'dub' : 'sub'}` },
+    { name: 'Server 3', url: `https://vidsrc.xyz/embed/anime?anilistId=${aniId}&episode=${ep}` },
+  ];
+}
+
+// ── CARDS ─────────────────────────────────────────────────────────────────
+function buildCard(a) {
+  const title = a.title.english || a.title.romaji;
+  const img = a.coverImage.large || a.coverImage.extraLarge;
+  const score = a.averageScore ? (a.averageScore / 10).toFixed(1) : '';
+  const el = document.createElement('div');
+  el.className = 'anime-card';
+  el.innerHTML = `
+    ${score ? `<div class="card-score">★ ${score}</div>` : ''}
+    <img class="card-poster" src="${img}" alt="${title}" loading="lazy">
+    <div class="card-overlay">▶</div>
+    <div class="card-info">
+      <div class="card-title">${title}</div>
+      <div class="card-meta">${a.format || ''}${a.episodes ? ' · ' + a.episodes + ' eps' : ''}</div>
+    </div>`;
+  el.onclick = () => openAnime(a);
+  return el;
+}
+
+function fillGrid(id, list) {
+  const g = document.getElementById(id);
+  g.innerHTML = '';
+  list.forEach(a => g.appendChild(buildCard(a)));
+}
+
+// ── HERO ──────────────────────────────────────────────────────────────────
+function setupHero(list) {
+  heroAnime = list.filter(a => a.bannerImage).slice(0, 6);
+  const dots = document.getElementById('heroDots');
+  dots.innerHTML = '';
+  heroAnime.forEach((_, i) => {
+    const b = document.createElement('button');
+    b.className = 'hero-dot' + (i === 0 ? ' active' : '');
+    b.onclick = () => setHero(i);
+    dots.appendChild(b);
+  });
+  setHero(0);
+  clearInterval(heroTimer);
+  heroTimer = setInterval(() => setHero((heroIdx + 1) % heroAnime.length), 6500);
+}
+
+function setHero(i) {
+  heroIdx = i;
+  const a = heroAnime[i]; if (!a) return;
+  const title = a.title.english || a.title.romaji;
+  document.getElementById('heroBg').style.backgroundImage = `url('${a.bannerImage}')`;
+  document.getElementById('heroTitle').textContent = title;
+  document.getElementById('heroDesc').textContent = stripHtml(a.description);
+  document.getElementById('heroScore').textContent = a.averageScore ? '★ ' + (a.averageScore / 10).toFixed(1) + ' / 10' : '';
+  document.getElementById('heroGenres').innerHTML = (a.genres || []).slice(0, 4).map(g => `<span class="genre-pill">${g}</span>`).join('');
+  document.querySelectorAll('.hero-dot').forEach((d, idx) => d.classList.toggle('active', idx === i));
+}
+function heroPlay() { if (heroAnime[heroIdx]) openAnime(heroAnime[heroIdx]); }
+function heroInfo() { if (heroAnime[heroIdx]) openAnime(heroAnime[heroIdx]); }
+
+// ── HOME ──────────────────────────────────────────────────────────────────
+async function loadHome() {
+  renderCW();
+  const { s, y } = getSeason();
+  const [tr, pop, sea] = await Promise.all([aniQuery(QTrending), aniQuery(QPopular), aniQuery(QSeason(s, y))]);
+  setupHero(tr.Page.media);
+  fillGrid('trendingGrid', tr.Page.media.slice(0, 12));
+  fillGrid('popularGrid', pop.Page.media);
+  fillGrid('seasonGrid', sea.Page.media);
+}
+
+// ── OPEN ANIME ────────────────────────────────────────────────────────────
+function openAnime(anime, startEp = 1) {
+  currentAnime = anime;
+  const title = anime.title.english || anime.title.romaji;
+  const total = anime.episodes || 24;
+
+  document.getElementById('watchTitle').textContent = title;
+
+  const desc = stripHtml(anime.description);
+  const descEl = document.getElementById('watchDesc');
+  descEl.textContent = desc;
+  descEl.classList.remove('exp');
+  const rmBtn = document.getElementById('readMoreBtn');
+  rmBtn.style.display = desc.length > 200 ? 'block' : 'none';
+  rmBtn.textContent = 'Read more ▾';
+
+  document.getElementById('watchMeta').innerHTML =
+    [anime.format, anime.status, anime.season ? anime.season + ' ' + anime.seasonYear : '', anime.averageScore ? '★ ' + (anime.averageScore / 10).toFixed(1) : '']
+    .filter(Boolean).map(m => `<span class="badge">${m}</span>`).join('') +
+    (anime.genres || []).slice(0, 4).map(g => `<span class="badge red">${g}</span>`).join('');
+
+  document.getElementById('epCount').textContent = total + ' eps';
+
+  buildEpList(total);
+  showWatch();
+  loadEpisode(startEp);
+}
+
+// ── EP LIST ───────────────────────────────────────────────────────────────
+let allEps = [];
+function buildEpList(total) {
+  const list = document.getElementById('epList');
+  list.innerHTML = '';
+  allEps = [];
+  document.getElementById('epSearch').value = '';
+  for (let e = 1; e <= total; e++) {
+    const div = document.createElement('div');
+    div.className = 'ep-item';
+    div.dataset.ep = e;
+    div.innerHTML = `
+      <span class="ep-num">${e}</span>
+      <div class="ep-info">
+        <div class="ep-name">Episode ${e}</div>
+        <div class="ep-sub">~24 min</div>
+      </div>`;
+    div.onclick = () => loadEpisode(e);
+    list.appendChild(div);
+    allEps.push(div);
+  }
+}
+
+function filterEps(q) {
+  const v = q.trim();
+  allEps.forEach(el => {
+    el.style.display = (!v || el.dataset.ep.includes(v)) ? '' : 'none';
+  });
+}
+
+// ── LOAD EPISODE ──────────────────────────────────────────────────────────
+function loadEpisode(ep) {
+  currentEp = ep;
+  const total = currentAnime.episodes || 24;
+  document.getElementById('watchEpLabel').textContent = `Episode ${ep} of ${total}`;
+
+  currentServers = buildServers(currentAnime.id, ep, currentLang);
+  currentServerIdx = 0;
+  renderServerBtns();
+  applyServer();
+
+  saveCW(currentAnime, ep);
+
+  // update ep list highlight
+  allEps.forEach(el => {
+    const n = parseInt(el.dataset.ep);
+    const active = n === ep;
+    el.classList.toggle('active', active);
+    if (active) {
+      el.querySelector('.ep-info').innerHTML = `<div class="ep-name">Episode ${n}</div><div class="ep-playing">▶ NOW PLAYING</div>`;
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } else {
+      el.querySelector('.ep-info').innerHTML = `<div class="ep-name">Episode ${n}</div><div class="ep-sub">~24 min</div>`;
+    }
+  });
+}
+
+function renderServerBtns() {
+  const row = document.getElementById('serverRow');
+  row.innerHTML = '';
+  currentServers.forEach((s, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'server-btn' + (i === currentServerIdx ? ' active' : '');
+    btn.textContent = s.name;
+    btn.onclick = () => { currentServerIdx = i; renderServerBtns(); applyServer(); };
+    row.appendChild(btn);
+  });
+}
+
+function applyServer() {
+  const srv = currentServers[currentServerIdx]; if (!srv) return;
+  const frame = document.getElementById('playerFrame');
+  frame.src = '';
+  setTimeout(() => { frame.src = srv.url; }, 60);
+}
+
+// Auto-next episode via MegaPlay postMessage
+window.addEventListener('message', e => {
+  try {
+    let d = e.data;
+    if (typeof d === 'string') d = JSON.parse(d);
+    if (d.event === 'complete' || (d.channel === 'megacloud' && d.event === 'complete')) {
+      const total = currentAnime ? (currentAnime.episodes || 24) : 1;
+      if (currentEp < total) loadEpisode(currentEp + 1);
+    }
+  } catch(_) {}
+});
+
+// ── SEARCH ────────────────────────────────────────────────────────────────
+async function doSearch() {
+  const q = document.getElementById('searchInput').value.trim();
+  if (!q) return;
+  showSearch();
+  document.getElementById('searchHeading').innerHTML = `Results <em>for "${q}"</em>`;
+  document.getElementById('searchGrid').innerHTML = '<div class="loader"><div class="spinner"></div> Searching...</div>';
+  const data = await aniQuery(QSearch, { q });
+  const results = data.Page.media;
+  if (!results.length) { document.getElementById('searchGrid').innerHTML = '<div class="loader">No results found.</div>'; return; }
+  fillGrid('searchGrid', results);
+}
+document.getElementById('searchInput').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+
+async function loadSection(type) {
+  showSearch();
+  const labels = { trending: 'Trending', popular: 'All-Time Popular', season: 'This Season' };
+  document.getElementById('searchHeading').innerHTML = labels[type];
+  document.getElementById('searchGrid').innerHTML = '<div class="loader"><div class="spinner"></div> Loading...</div>';
+  let list;
+  if (type === 'trending') list = (await aniQuery(QTrending)).Page.media;
+  else if (type === 'popular') list = (await aniQuery(QPopular)).Page.media;
+  else { const { s, y } = getSeason(); list = (await aniQuery(QSeason(s, y))).Page.media; }
+  fillGrid('searchGrid', list);
+}
+
+// ── VIEW SWITCHING ────────────────────────────────────────────────────────
+function showHome() {
+  document.getElementById('homeView').style.display = 'block';
+  document.getElementById('watchView').style.display = 'none';
+  document.getElementById('searchView').style.display = 'none';
+  document.getElementById('playerFrame').src = '';
+  document.getElementById('searchInput').value = '';
+}
+function showWatch() {
+  document.getElementById('homeView').style.display = 'none';
+  document.getElementById('watchView').style.display = 'block';
+  document.getElementById('searchView').style.display = 'none';
+  window.scrollTo(0, 0);
+}
+function showSearch() {
+  document.getElementById('homeView').style.display = 'none';
+  document.getElementById('watchView').style.display = 'none';
+  document.getElementById('searchView').style.display = 'block';
+  document.getElementById('playerFrame').src = '';
+}
+
+function toggleDesc() {
+  const d = document.getElementById('watchDesc'), b = document.getElementById('readMoreBtn');
+  d.classList.toggle('exp');
+  b.textContent = d.classList.contains('exp') ? 'Show less ▴' : 'Read more ▾';
+}
+
+// ── BOOT ──────────────────────────────────────────────────────────────────
+loadHome();
+</script>
+</body>
+</html>
