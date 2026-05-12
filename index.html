@@ -680,6 +680,46 @@ nav {
 .modal-error { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: #ef4444; border-radius: 6px; padding: 0.5rem 0.75rem; font-size: 0.82rem; margin-bottom: 0.75rem; display: none; }
 .modal-error.show { display: block; }
 
+/* ── SERVER SWITCHER ─────────────────────────────────────────────── */
+.server-bar {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.65rem 0; margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+.server-label {
+  font-size: 0.75rem; font-weight: 700; letter-spacing: 1px;
+  color: var(--muted); text-transform: uppercase; flex-shrink: 0;
+}
+.server-group { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.server-btn {
+  display: flex; align-items: center; gap: 0.4rem;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 7px; padding: 0.35rem 0.85rem;
+  font-family: 'Outfit', sans-serif; font-size: 0.8rem; font-weight: 600;
+  color: var(--muted); cursor: pointer; transition: all 0.18s;
+  white-space: nowrap;
+}
+.server-btn:hover { border-color: var(--accent); color: var(--text); }
+.server-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(232,109,176,0.1); }
+.server-btn .srv-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--muted); flex-shrink: 0; transition: background 0.18s;
+}
+.server-btn.active .srv-dot { background: var(--accent); }
+.server-divider {
+  width: 1px; height: 20px; background: var(--border); flex-shrink: 0; margin: 0 0.1rem;
+}
+.dub-toggle {
+  display: flex; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 7px; overflow: hidden; flex-shrink: 0; margin-left: auto;
+}
+.dub-btn {
+  background: none; border: none; padding: 0.35rem 0.8rem;
+  font-family: 'Outfit', sans-serif; font-size: 0.78rem; font-weight: 700;
+  letter-spacing: 0.5px; color: var(--muted); cursor: pointer; transition: all 0.15s;
+}
+.dub-btn.active { background: var(--accent); color: #fff; }
+
 /* SKELETON */
 .skeleton { background: linear-gradient(90deg, var(--card) 25%, var(--surface) 50%, var(--card) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 6px; }
 @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
@@ -834,6 +874,24 @@ nav {
       <div class="ep-breadcrumb">
         <button class="back-btn" onclick="showHome()">← Back</button>
       </div>
+      <!-- Server & Sub/Dub switcher -->
+      <div class="server-bar">
+        <span class="server-label">Server</span>
+        <div class="server-group">
+          <button class="server-btn active" id="srv-filmu" onclick="switchServer('filmu')">
+            <span class="srv-dot"></span> FilmU
+          </button>
+          <div class="server-divider"></div>
+          <button class="server-btn" id="srv-animplay" onclick="switchServer('animplay')">
+            <span class="srv-dot"></span> AnimPlay
+          </button>
+        </div>
+        <div class="dub-toggle" id="dubToggle">
+          <button class="dub-btn active" id="dub-sub" onclick="switchDub('sub')">SUB</button>
+          <button class="dub-btn" id="dub-dub" onclick="switchDub('dub')">DUB</button>
+        </div>
+      </div>
+
       <div class="player-wrap">
         <iframe id="playerIframe" allowfullscreen allow="autoplay; encrypted-media; picture-in-picture"></iframe>
       </div>
@@ -946,6 +1004,8 @@ async function fetchRelated(id) {
 let heroList = [], currentHeroIdx = 0, heroTimer = null;
 let currentTab = 'newest', currentPage = 1, currentGenre = null;
 let currentAnime = null, currentEp = 1, currentSeason = 1, totalEps = 0;
+let currentServer = 'filmu'; // 'filmu' | 'animplay'
+let currentDub = 'sub';      // 'sub' | 'dub'
 let epPageSize = 20, epPageCurrent = 0;
 let allEpItems = [];
 let commentsUnsub = null;
@@ -1120,6 +1180,14 @@ function openWatch(anime, ep=1) {
   currentEp = ep;
   currentSeason = 1;
   totalEps = anime.episodes || 24;
+  // Reset server UI to FilmU on new anime open
+  currentServer = 'filmu';
+  currentDub = 'sub';
+  document.getElementById('srv-filmu').classList.add('active');
+  document.getElementById('srv-animplay').classList.remove('active');
+  document.getElementById('dub-sub').classList.add('active');
+  document.getElementById('dub-dub').classList.remove('active');
+  document.getElementById('dubToggle').style.display = 'none';
 
   showWatch();
   loadPlayer(currentSeason, ep);
@@ -1130,8 +1198,38 @@ function openWatch(anime, ep=1) {
   addHistory(anime, ep);
 }
 
+function buildEmbedUrl(server, anilistId, season, ep, dub) {
+  if (server === 'animplay') {
+    // AnimPlay: https://play.animatedhaven.com/anime/{anilist_id}?ep={ep}&dub={0|1}
+    const dubParam = dub === 'dub' ? 1 : 0;
+    return `https://play.animatedhaven.com/anime/${anilistId}?ep=${ep}&dub=${dubParam}`;
+  }
+  // Default: FilmU
+  return `https://embed.filmu.in/anime/${anilistId}/${season}/${ep}`;
+}
+
 function loadPlayer(season, ep) {
-  document.getElementById('playerIframe').src = `https://embed.filmu.in/anime/${currentAnime.id}/${season}/${ep}`;
+  const url = buildEmbedUrl(currentServer, currentAnime.id, season, ep, currentDub);
+  document.getElementById('playerIframe').src = url;
+  // Show/hide dub toggle — AnimPlay supports sub/dub, FilmU is sub only
+  const dubToggle = document.getElementById('dubToggle');
+  dubToggle.style.display = currentServer === 'animplay' ? 'flex' : 'none';
+}
+
+function switchServer(server) {
+  currentServer = server;
+  document.getElementById('srv-filmu').classList.toggle('active', server === 'filmu');
+  document.getElementById('srv-animplay').classList.toggle('active', server === 'animplay');
+  loadPlayer(currentSeason, currentEp);
+  showToast(server === 'animplay' ? 'Switched to AnimPlay 🎌' : 'Switched to FilmU 🎬', 'success');
+}
+
+function switchDub(type) {
+  currentDub = type;
+  document.getElementById('dub-sub').classList.toggle('active', type === 'sub');
+  document.getElementById('dub-dub').classList.toggle('active', type === 'dub');
+  loadPlayer(currentSeason, currentEp);
+  showToast(type === 'dub' ? 'Switched to Dub 🔊' : 'Switched to Sub 🈯', 'success');
 }
 
 function renderWatchInfo(anime, ep) {
