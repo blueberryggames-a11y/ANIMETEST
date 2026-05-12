@@ -543,7 +543,7 @@ function renderCW() {
         <div class="cw-ep">Ep ${item.ep} · ${pct}%</div>
       </div>`;
     div.onclick = () => {
-      const stub = { id: parseInt(id), title: { english: item.title, romaji: item.title }, coverImage: { large: item.poster, extraLarge: item.poster }, episodes: item.totalEps, description: '', genres: [], averageScore: null, format: '', status: '', season: '', seasonYear: '', bannerImage: '' };
+      const stub = { id: parseInt(id), idMal: null, title: { english: item.title, romaji: item.title }, coverImage: { large: item.poster, extraLarge: item.poster }, episodes: item.totalEps, description: '', genres: [], averageScore: null, format: '', status: '', season: '', seasonYear: '', bannerImage: '' };
       openAnime(stub, item.ep);
     };
     strip.appendChild(div);
@@ -555,7 +555,7 @@ function setLang(l) {
   currentLang = l;
   document.getElementById('btnSub').classList.toggle('active', l === 'sub');
   document.getElementById('btnDub').classList.toggle('active', l === 'dub');
-  if (currentAnime) { buildServersFor(currentAnime.id, currentEp); applyServer(); }
+  if (currentAnime) { buildServersFor(currentAnime.id, currentAnime.idMal || null, currentEp); applyServer(); }
 }
 
 // ── ANILIST ───────────────────────────────────────────────────────────────
@@ -563,7 +563,7 @@ async function aniQuery(query, variables = {}) {
   const r = await fetch(ANILIST, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query, variables }) });
   return (await r.json()).data;
 }
-const F = `id title{romaji english}coverImage{extraLarge large}bannerImage description episodes averageScore genres status format season seasonYear`;
+const F = `id idMal title{romaji english}coverImage{extraLarge large}bannerImage description episodes averageScore genres status format season seasonYear`;
 const QTrending = `{Page(perPage:20){media(sort:TRENDING_DESC,type:ANIME,isAdult:false){${F}}}}`;
 const QPopular  = `{Page(perPage:12){media(sort:POPULARITY_DESC,type:ANIME,isAdult:false){${F}}}}`;
 const QSeason   = (s,y) => `{Page(perPage:12){media(season:${s},seasonYear:${y},type:ANIME,isAdult:false,sort:POPULARITY_DESC){${F}}}}`;
@@ -576,28 +576,29 @@ function getSeason() {
 }
 
 // ── SERVERS ───────────────────────────────────────────────────────────────
-// All three are verified working 2025 embed providers that accept AniList IDs natively.
+// Verified working embed providers as of 2025/2026:
 //
-// vidsrc.cc  → documented at vidsrc.cc, format: /v2/embed/anime/{anilistId}/{ep}/{type}
-// vidsrc.icu → documented at vidsrc.icu, format: /embed/anime/{anilistId}/{ep}/{0|1}
-// 2embed.cc  → documented embed API, accepts AniList IDs for anime
+// vidsrc.cc  — public documented API, AniList IDs, /v2/embed/anime/{id}/{ep}/{sub|dub}
+// vidsrc.icu — public documented API, AniList IDs, /embed/anime/{id}/{ep}/{0|1}
+// vidsrc.me  — original vidsrc, MAL IDs, /embed/anime?malId={id}&episode={ep}
+//              Uses anime.idMal which we fetch from AniList alongside all other data.
 
-function buildServersFor(aniId, ep) {
+function buildServersFor(aniId, malId, ep) {
   const dubCc  = currentLang === 'dub' ? 'dub' : 'sub';
   const dubIcu = currentLang === 'dub' ? '1' : '0';
   currentServers = [
     {
-      name: 'VidSrc CC',
+      name: 'VidSrc',
       url: `https://vidsrc.cc/v2/embed/anime/${aniId}/${ep}/${dubCc}`
     },
     {
-      name: 'VidSrc ICU',
+      name: 'VidSrc 2',
       url: `https://vidsrc.icu/embed/anime/${aniId}/${ep}/${dubIcu}`
     },
-    {
-      name: '2Embed',
-      url: `https://www.2embed.cc/embedani/${aniId}/${ep}`
-    }
+    ...(malId ? [{
+      name: 'VidSrc OG',
+      url: `https://vidsrc.me/embed/anime?malId=${malId}&episode=${ep}&type=${currentLang}`
+    }] : [])
   ];
 }
 
@@ -717,7 +718,7 @@ function loadEpisode(ep) {
   const total = currentAnime.episodes || 24;
   document.getElementById('watchEpLabel').textContent = `Episode ${ep} of ${total}`;
 
-  buildServersFor(currentAnime.id, ep);
+  buildServersFor(currentAnime.id, currentAnime.idMal || null, ep);
   currentServerIdx = 0;
   renderServerBtns();
   applyServer();
@@ -752,13 +753,18 @@ function applyServer() {
   loading.classList.remove('hidden');
   notice.style.display = 'none';
   frame.src = '';
+
+  // Small gap so the browser clears the old iframe before loading the new one
   setTimeout(() => {
     frame.src = srv.url;
+
+    // Cross-origin iframes don't fire load reliably.
+    // Show the player after 3.5 s and hint to switch server if needed.
     setTimeout(() => {
       loading.classList.add('hidden');
       notice.style.display = 'block';
-    }, 2800);
-  }, 80);
+    }, 3500);
+  }, 120);
 }
 
 // Auto-next via postMessage (VidSrc CC / ICU both support this)
