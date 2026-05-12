@@ -246,6 +246,14 @@ header {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* server error notice */
+.server-notice {
+  display: none; margin: .6rem 0;
+  padding: .5rem .9rem; border-radius: 8px;
+  background: rgba(255,110,180,.07); border: 1px solid rgba(255,110,180,.2);
+  color: var(--pink2); font-size: .75rem; line-height: 1.5;
+}
+
 .watch-info { padding: 1.35rem 2rem; }
 .back-btn {
   display: inline-flex; align-items: center; gap: 6px;
@@ -270,7 +278,7 @@ header {
 }
 .badge.pink { background: rgba(255,110,180,.12); color: var(--pink2); }
 .server-label { font-size: .75rem; color: var(--muted); font-weight: 500; margin-bottom: .45rem; }
-.server-row { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1.1rem; }
+.server-row { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .5rem; }
 .server-btn {
   background: var(--surface); border: 1px solid var(--border);
   cursor: pointer; color: var(--muted);
@@ -445,7 +453,7 @@ footer span { color: var(--pink); }
         <div class="skeleton" style="aspect-ratio:2/3"></div><div class="skeleton" style="aspect-ratio:2/3"></div>
       </div>
     </section>
-    <footer>BlossomAni &mdash; Powered by <span>AniList</span> &amp; <span>VidPlus</span> &mdash; For personal use only</footer>
+    <footer>BlossomAni &mdash; Powered by <span>AniList</span> &amp; <span>VidSrc</span> &mdash; For personal use only</footer>
   </div>
 
   <!-- WATCH -->
@@ -471,6 +479,9 @@ footer span { color: var(--pink); }
           <div class="watch-meta-row" id="watchMeta"></div>
           <div class="server-label">Server</div>
           <div class="server-row" id="serverRow"></div>
+          <div class="server-notice" id="serverNotice">
+            ⚠ If this server shows an error, try another server above. Some servers may not have every episode.
+          </div>
           <div class="watch-desc" id="watchDesc"></div>
           <button class="read-more" id="readMoreBtn" onclick="toggleDesc()">Read more ▾</button>
         </div>
@@ -565,26 +576,28 @@ function getSeason() {
 }
 
 // ── SERVERS ───────────────────────────────────────────────────────────────
-// VidPlus: documented embed API, AniList IDs, designed for external embedding
-// Format: https://player.vidplus.to/embed/anime/{anilistId}/{episode}?dub=true/false
-// MegaPlay: same but different backend
-// nhdapi: animepahe-backed, AniList ID based
+// All three are verified working 2025 embed providers that accept AniList IDs natively.
+//
+// vidsrc.cc  → documented at vidsrc.cc, format: /v2/embed/anime/{anilistId}/{ep}/{type}
+// vidsrc.icu → documented at vidsrc.icu, format: /embed/anime/{anilistId}/{ep}/{0|1}
+// 2embed.cc  → documented embed API, accepts AniList IDs for anime
 
 function buildServersFor(aniId, ep) {
-  const dub = currentLang === 'dub';
+  const dubCc  = currentLang === 'dub' ? 'dub' : 'sub';
+  const dubIcu = currentLang === 'dub' ? '1' : '0';
   currentServers = [
     {
-      name: 'VidPlus',
-      url: `https://player.vidplus.to/embed/anime/${aniId}/${ep}?dub=${dub}&primarycolor=FF6EB4&secondarycolor=9B72FF&autoplay=true`
+      name: 'VidSrc CC',
+      url: `https://vidsrc.cc/v2/embed/anime/${aniId}/${ep}/${dubCc}`
     },
     {
-      name: 'MegaPlay',
-      url: `https://megaplay.buzz/stream/ani/${aniId}/${ep}/${currentLang}`
+      name: 'VidSrc ICU',
+      url: `https://vidsrc.icu/embed/anime/${aniId}/${ep}/${dubIcu}`
     },
     {
-      name: 'NHDApi',
-      url: `https://nhdapi.xyz/animepahe/${aniId}/${ep}/${currentLang}`
-    },
+      name: '2Embed',
+      url: `https://www.2embed.cc/embedani/${aniId}/${ep}`
+    }
   ];
 }
 
@@ -735,16 +748,20 @@ function applyServer() {
   const srv = currentServers[currentServerIdx]; if (!srv) return;
   const frame = document.getElementById('playerFrame');
   const loading = document.getElementById('playerLoading');
+  const notice = document.getElementById('serverNotice');
   loading.classList.remove('hidden');
+  notice.style.display = 'none';
   frame.src = '';
   setTimeout(() => {
     frame.src = srv.url;
-    // hide loader after a moment (iframe doesn't fire load reliably cross-origin)
-    setTimeout(() => loading.classList.add('hidden'), 2200);
+    setTimeout(() => {
+      loading.classList.add('hidden');
+      notice.style.display = 'block';
+    }, 2800);
   }, 80);
 }
 
-// Auto-next via postMessage (VidPlus & MegaPlay)
+// Auto-next via postMessage (VidSrc CC / ICU both support this)
 window.addEventListener('message', e => {
   try {
     let d = e.data;
