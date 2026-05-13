@@ -15,7 +15,7 @@
 <!-- Firebase -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
-  import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+  import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
   import { getFirestore, doc, getDoc, addDoc, collection, query, where, orderBy, onSnapshot, serverTimestamp, getDocs } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -31,24 +31,21 @@
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const db = getFirestore(app);
-  window.__fb = { auth, db, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile, doc, getDoc, addDoc, collection, query, where, orderBy, onSnapshot, serverTimestamp, getDocs };
+  const googleProvider = new GoogleAuthProvider();
+  window.__fb = { auth, db, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup, googleProvider, doc, getDoc, addDoc, collection, query, where, orderBy, onSnapshot, serverTimestamp, getDocs };
 
-  // Check maintenance mode from Firestore
-  async function checkMaintenance() {
-    try {
-      const snap = await getDoc(doc(db, 'admin', 'settings'));
-      if (snap.exists() && snap.data().maintenance === true) {
-        document.getElementById('maintenance-overlay').style.display = 'flex';
-        document.getElementById('app').style.display = 'none';
-      } else {
-        document.getElementById('maintenance-overlay').style.display = 'none';
-        document.getElementById('app').style.display = 'block';
-      }
-    } catch(e) {
-      document.getElementById('app').style.display = 'block';
-    }
-  }
-  checkMaintenance();
+  // ── Realtime maintenance mode listener ──────────────────────────
+  // Uses onSnapshot so toggling maintenance=true/false in Firestore
+  // instantly shows/hides the overlay for ALL active visitors.
+  const settingsRef = doc(db, 'admin', 'settings');
+  onSnapshot(settingsRef, (snap) => {
+    const inMaintenance = snap.exists() && snap.data().maintenance === true;
+    document.getElementById('maintenance-overlay').style.display = inMaintenance ? 'flex' : 'none';
+    document.getElementById('app').style.display = inMaintenance ? 'none' : 'block';
+  }, () => {
+    // If read fails (e.g. no doc yet), just show the app
+    document.getElementById('app').style.display = 'block';
+  });
 
   onAuthStateChanged(auth, user => {
     window.__currentUser = user;
@@ -718,6 +715,29 @@ nav {
 .modal-submit:hover { background: var(--blossom2); }
 .modal-error { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: #ef4444; border-radius: 6px; padding: 0.5rem 0.75rem; font-size: 0.82rem; margin-bottom: 0.75rem; display: none; }
 .modal-error.show { display: block; }
+.modal-divider {
+  display: flex; align-items: center; gap: 0.75rem; margin: 1rem 0;
+  color: var(--muted); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.5px;
+}
+.modal-divider::before, .modal-divider::after {
+  content: \'\'; flex: 1; height: 1px; background: var(--border);
+}
+.btn-google {
+  width: 100%; background: #fff; color: #1f1f1f; border: 1px solid #dadce0;
+  border-radius: 8px; padding: 0.6rem; font-family: var(--font-body);
+  font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
+  display: flex; align-items: center; justify-content: center; gap: 0.6rem;
+  margin-bottom: 0.25rem;
+}
+.btn-google:hover { background: #f8f8f8; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+.btn-google svg { width: 18px; height: 18px; flex-shrink: 0; }
+.modal-support {
+  text-align: center; margin-top: 1.25rem; padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.78rem; color: var(--muted); line-height: 1.6;
+}
+.modal-support a { color: var(--accent); text-decoration: none; font-weight: 600; }
+.modal-support a:hover { text-decoration: underline; }
 
 /* ── SERVER SWITCHER ─────────────────────────────────────────────── */
 .server-bar {
