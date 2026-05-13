@@ -7,9 +7,9 @@
 
 <!-- Favicon: official AniBlossom SVG logo -->
 <link rel="icon" type="image/svg+xml" href="icons/AniBlossom_logo.svg">
-<link rel="alternate icon" href="icons/AniBlossom_text.svg">
+<link rel="alternate icon" href="icons/AniBlossom_logo.svg">
 
-<!-- Font: Plus Jakarta Sans — clean, bold, modern; matches the "Watch History" reference -->
+<!-- Font: Plus Jakarta Sans -->
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
 
 <!-- Firebase -->
@@ -34,16 +34,12 @@
   const googleProvider = new GoogleAuthProvider();
   window.__fb = { auth, db, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup, googleProvider, doc, getDoc, addDoc, collection, query, where, orderBy, onSnapshot, serverTimestamp, getDocs };
 
-  // ── Realtime maintenance mode listener ──────────────────────────
-  // Uses onSnapshot so toggling maintenance=true/false in Firestore
-  // instantly shows/hides the overlay for ALL active visitors.
   const settingsRef = doc(db, 'admin', 'settings');
   onSnapshot(settingsRef, (snap) => {
     const inMaintenance = snap.exists() && snap.data().maintenance === true;
     document.getElementById('maintenance-overlay').style.display = inMaintenance ? 'flex' : 'none';
     document.getElementById('app').style.display = inMaintenance ? 'none' : 'block';
   }, () => {
-    // If read fails (e.g. no doc yet), just show the app
     document.getElementById('app').style.display = 'block';
   });
 
@@ -68,7 +64,6 @@
   --muted: #6e6a85;
   --sidebar-w: 320px;
   --nav-h: 56px;
-  /* Font stack — Plus Jakarta Sans as primary body/UI font */
   --font-body: 'Plus Jakarta Sans', sans-serif;
   --font-display: 'Playfair Display', serif;
 }
@@ -81,7 +76,6 @@ body {
   font-family: var(--font-body);
   min-height: 100vh;
   overflow-x: hidden;
-  /* Plus Jakarta Sans renders crisper with slight smoothing */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -94,6 +88,61 @@ body::before {
     radial-gradient(ellipse 400px 300px at 10% 80%, rgba(232,109,176,0.03) 0%, transparent 70%);
   pointer-events: none; z-index: 0;
 }
+
+/* ── LOGO ANIMATIONS ─────────────────────────────────────────────── */
+@keyframes logoEntrance {
+  from { opacity: 0; transform: translateY(-6px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes logoPulse {
+  0%, 100% { filter: drop-shadow(0 0 6px rgba(232,109,176,0.35)); }
+  50%       { filter: drop-shadow(0 0 14px rgba(232,109,176,0.7)); }
+}
+@keyframes logoFloat {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-3px); }
+}
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes navLoad {
+  from { opacity: 0; transform: translateY(-100%); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes shimmerLogo {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+/* ── LOGO IMAGE STYLES ───────────────────────────────────────────── */
+.logo-text-img {
+  height: 28px;
+  width: auto;
+  object-fit: contain;
+  flex-shrink: 0;
+  animation: logoEntrance 0.5s cubic-bezier(0.34,1.56,0.64,1) both,
+             logoFloat 4s ease-in-out 0.5s infinite;
+  filter: drop-shadow(0 0 8px rgba(232,109,176,0.4));
+  transition: filter 0.3s;
+}
+.logo-text-img:hover {
+  filter: drop-shadow(0 0 16px rgba(232,109,176,0.8));
+  animation: logoEntrance 0s, logoFloat 4s ease-in-out infinite; /* keep float */
+}
+
+/* Fallback text logo (shown if SVG fails) */
+.logo-fallback {
+  display: none;
+  font-family: var(--font-display);
+  font-size: 1.4rem; font-weight: 900;
+  background: linear-gradient(135deg, #ffb7d5, #e86db0, #ffb7d5);
+  background-size: 200% auto;
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  animation: shimmerLogo 3s linear infinite, logoEntrance 0.5s ease both;
+}
+.logo-text-img.errored { display: none; }
+.logo-text-img.errored ~ .logo-fallback { display: block; }
 
 /* ── MAINTENANCE OVERLAY ─────────────────────────────────────────── */
 #maintenance-overlay {
@@ -123,20 +172,20 @@ body::before {
   90% { opacity: 0.5; }
   100% { transform: translateY(110vh) rotate(720deg) scale(1.1); opacity: 0; }
 }
-.maint-logo {
+.maint-logo-img {
+  height: 48px; width: auto;
+  margin-bottom: 1rem;
+  position: relative; z-index: 1;
+  animation: floatBlossom 3s ease-in-out infinite,
+             logoPulse 3s ease-in-out infinite;
+}
+.maint-logo-fallback {
   font-family: var(--font-display);
   font-size: clamp(2.5rem, 6vw, 4.5rem);
   font-weight: 900;
   background: linear-gradient(135deg, #ffb7d5, #e86db0, #f4a6cc);
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   margin-bottom: 0.5rem;
-  position: relative; z-index: 1;
-  display: flex; align-items: center; gap: 0.5rem; justify-content: center;
-}
-.maint-blossom-icon {
-  width: 56px; height: 56px;
-  margin-bottom: 1rem;
-  animation: floatBlossom 3s ease-in-out infinite;
   position: relative; z-index: 1;
 }
 @keyframes floatBlossom { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-12px)} }
@@ -185,23 +234,14 @@ nav {
   backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--border);
   display: flex; align-items: center; padding: 0 1.5rem; gap: 1.25rem;
+  animation: navLoad 0.4s ease both;
 }
 .logo {
-  font-family: var(--font-display);
-  font-size: 1.4rem; font-weight: 900;
-  background: linear-gradient(135deg, #ffb7d5, #e86db0);
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  display: flex; align-items: center; gap: 0;
   cursor: pointer; flex-shrink: 0; user-select: none;
-  display: flex; align-items: center; gap: 8px;
+  text-decoration: none;
 }
-/* Logo SVG image in nav */
-.logo-img {
-  width: 26px; height: 26px;
-  object-fit: contain;
-  flex-shrink: 0;
-  /* Reset the gradient clip so the img shows normally */
-  -webkit-text-fill-color: initial;
-}
+.logo:hover .logo-text-img { filter: drop-shadow(0 0 18px rgba(232,109,176,0.9)); }
 
 .nav-search {
   flex: 1; max-width: 480px; position: relative;
@@ -267,7 +307,9 @@ nav {
   background: linear-gradient(135deg, var(--accent), var(--accent2));
   border: none; cursor: pointer; display: flex; align-items: center; justify-content: center;
   font-size: 0.85rem; font-weight: 800; color: #fff;
+  transition: transform 0.2s, box-shadow 0.2s;
 }
+.avatar-btn:hover { transform: scale(1.1); box-shadow: 0 0 12px rgba(232,109,176,0.5); }
 
 /* ── GENRE TABS ──────────────────────────────────────────────────── */
 .genre-bar {
@@ -399,56 +441,24 @@ nav {
 }
 .hist-card:hover { border-color: var(--accent); }
 .hist-thumb { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; background: var(--card); }
-.hist-prog {
-  position: absolute; bottom: 0; left: 0; right: 0; height: 3px;
-  background: rgba(255,255,255,0.1);
-}
+.hist-prog { position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: rgba(255,255,255,0.1); }
 .hist-prog-fill { height: 100%; background: var(--accent); }
-.hist-ep-tag {
-  position: absolute; top: 5px; left: 5px;
-  background: rgba(13,13,18,0.85); border-radius: 4px;
-  padding: 1px 6px; font-size: 0.7rem; font-weight: 700;
-}
-.hist-time-tag {
-  position: absolute; bottom: 6px; right: 5px;
-  background: rgba(13,13,18,0.85); border-radius: 3px;
-  padding: 1px 5px; font-size: 0.68rem; color: var(--muted);
-}
-.hist-close {
-  position: absolute; top: 4px; right: 4px;
-  background: rgba(13,13,18,0.8); border: none; border-radius: 50%;
-  width: 20px; height: 20px; color: var(--muted); cursor: pointer;
-  font-size: 0.65rem; display: flex; align-items: center; justify-content: center;
-  opacity: 0; transition: opacity 0.2s;
-}
+.hist-ep-tag { position: absolute; top: 5px; left: 5px; background: rgba(13,13,18,0.85); border-radius: 4px; padding: 1px 6px; font-size: 0.7rem; font-weight: 700; }
+.hist-time-tag { position: absolute; bottom: 6px; right: 5px; background: rgba(13,13,18,0.85); border-radius: 3px; padding: 1px 5px; font-size: 0.68rem; color: var(--muted); }
+.hist-close { position: absolute; top: 4px; right: 4px; background: rgba(13,13,18,0.8); border: none; border-radius: 50%; width: 20px; height: 20px; color: var(--muted); cursor: pointer; font-size: 0.65rem; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s; }
 .hist-card:hover .hist-close { opacity: 1; }
 .hist-name { padding: 0.35rem 0.5rem; font-size: 0.78rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--card); }
 
 /* TABS BAR */
-.list-tabs {
-  display: flex; align-items: center; gap: 0; padding: 1rem 1.5rem 0;
-  border-bottom: 1px solid var(--border); margin: 0.5rem 0 0;
-}
-.ltab {
-  background: none; border: none; border-bottom: 2px solid transparent;
-  color: var(--muted); font-family: var(--font-body); font-size: 0.88rem; font-weight: 700;
-  padding: 0.5rem 1rem; cursor: pointer; transition: all 0.15s; margin-bottom: -1px;
-}
+.list-tabs { display: flex; align-items: center; gap: 0; padding: 1rem 1.5rem 0; border-bottom: 1px solid var(--border); margin: 0.5rem 0 0; }
+.ltab { background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); font-family: var(--font-body); font-size: 0.88rem; font-weight: 700; padding: 0.5rem 1rem; cursor: pointer; transition: all 0.15s; margin-bottom: -1px; }
 .ltab:hover { color: var(--text); }
 .ltab.active { color: var(--accent); border-bottom-color: var(--accent); }
 
 /* ANIME GRID */
 .anime-grid-wrap { padding: 1rem 1.5rem; }
-.anime-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
-  gap: 0.85rem;
-}
-.ac {
-  cursor: pointer; border-radius: 8px; overflow: hidden;
-  background: var(--card); border: 1px solid var(--border);
-  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
-}
+.anime-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: 0.85rem; }
+.ac { cursor: pointer; border-radius: 8px; overflow: hidden; background: var(--card); border: 1px solid var(--border); transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s; }
 .ac:hover { transform: translateY(-3px); border-color: var(--accent); box-shadow: 0 6px 20px rgba(232,109,176,0.15); }
 .ac-img-w { position: relative; aspect-ratio: 2/3; overflow: hidden; }
 .ac-img-w img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.3s; }
@@ -462,16 +472,10 @@ nav {
 
 /* SIDEBAR */
 .sb-section { margin-bottom: 1.5rem; }
-.sb-title {
-  font-size: 0.78rem; font-weight: 700; letter-spacing: 0.8px; color: var(--muted);
-  text-transform: uppercase; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.4rem;
-}
+.sb-title { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.8px; color: var(--muted); text-transform: uppercase; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.4rem; }
 .sb-title::before { content: '›'; color: var(--accent); font-size: 1rem; }
 .sb-list { display: flex; flex-direction: column; gap: 0.5rem; }
-.sb-item {
-  display: flex; gap: 0.65rem; align-items: center;
-  cursor: pointer; padding: 0.35rem; border-radius: 6px; transition: background 0.15s;
-}
+.sb-item { display: flex; gap: 0.65rem; align-items: center; cursor: pointer; padding: 0.35rem; border-radius: 6px; transition: background 0.15s; }
 .sb-item:hover { background: var(--card); }
 .sb-thumb { width: 42px; height: 58px; object-fit: cover; border-radius: 5px; background: var(--border); flex-shrink: 0; }
 .sb-info { min-width: 0; flex: 1; }
@@ -481,11 +485,7 @@ nav {
 
 /* PAGINATION */
 .pagination { display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 1rem 1.5rem 2rem; }
-.pg-btn {
-  background: var(--surface); border: 1px solid var(--border);
-  color: var(--muted); border-radius: 6px; padding: 0.4rem 0.85rem;
-  font-family: var(--font-body); font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.15s;
-}
+.pg-btn { background: var(--surface); border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 0.4rem 0.85rem; font-family: var(--font-body); font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.15s; }
 .pg-btn:hover, .pg-btn.active { border-color: var(--accent); color: var(--accent); }
 .pg-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
@@ -493,28 +493,13 @@ nav {
 #watch-view { display: none; }
 .watch-layout { display: flex; gap: 0; }
 .watch-main { flex: 1; min-width: 0; padding: 1.25rem 1.5rem; }
-.watch-sidebar {
-  width: var(--sidebar-w); flex-shrink: 0;
-  border-left: 1px solid var(--border);
-  background: var(--surface);
-}
+.watch-sidebar { width: var(--sidebar-w); flex-shrink: 0; border-left: 1px solid var(--border); background: var(--surface); }
 
-.player-wrap {
-  width: 100%; aspect-ratio: 16/9;
-  background: #000; border-radius: 10px; overflow: hidden;
-  border: 1px solid var(--border);
-}
+.player-wrap { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
 .player-wrap iframe { width: 100%; height: 100%; border: none; display: block; }
 
-.ep-breadcrumb {
-  display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;
-}
-.back-btn {
-  background: none; border: 1px solid var(--border); color: var(--muted);
-  border-radius: 6px; padding: 0.35rem 0.85rem; font-family: var(--font-body);
-  font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
-  display: flex; align-items: center; gap: 0.4rem;
-}
+.ep-breadcrumb { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+.back-btn { background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 0.35rem 0.85rem; font-family: var(--font-body); font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 0.4rem; }
 .back-btn:hover { border-color: var(--accent); color: var(--accent); }
 
 .watch-info { margin-top: 1rem; }
@@ -528,19 +513,11 @@ nav {
 .ep-action-btn:hover { border-color: var(--accent); color: var(--accent); }
 .ep-desc { margin-top: 0.75rem; font-size: 0.88rem; color: rgba(240,238,245,0.75); line-height: 1.65; }
 
-/* ANIME DETAIL INFO */
-.anime-detail {
-  margin-top: 1.5rem; display: flex; gap: 1.25rem;
-  padding-top: 1.5rem; border-top: 1px solid var(--border);
-}
+.anime-detail { margin-top: 1.5rem; display: flex; gap: 1.25rem; padding-top: 1.5rem; border-top: 1px solid var(--border); }
 .detail-poster { width: 110px; flex-shrink: 0; }
 .detail-poster img { width: 100%; border-radius: 8px; display: block; }
 .detail-poster-btns { margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.35rem; }
-.dpb {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 5px; padding: 0.3rem 0; text-align: center;
-  font-size: 0.72rem; font-weight: 700; color: var(--muted); cursor: pointer; transition: all 0.15s;
-}
+.dpb { background: var(--surface); border: 1px solid var(--border); border-radius: 5px; padding: 0.3rem 0; text-align: center; font-size: 0.72rem; font-weight: 700; color: var(--muted); cursor: pointer; transition: all 0.15s; }
 .dpb:hover { border-color: var(--accent); color: var(--accent); }
 .detail-info { flex: 1; min-width: 0; }
 .detail-title { font-size: 1.2rem; font-weight: 800; margin-bottom: 2px; letter-spacing: -0.01em; }
@@ -548,72 +525,41 @@ nav {
 .detail-genre-tags { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
 .dg-tag { background: rgba(232,109,176,0.12); border: 1px solid rgba(232,109,176,0.3); color: var(--accent); border-radius: 20px; padding: 2px 10px; font-size: 0.75rem; font-weight: 600; }
 .detail-desc { font-size: 0.83rem; color: var(--muted); line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
-.detail-stats {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem 1.5rem;
-  margin-top: 0.85rem;
-}
+.detail-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem 1.5rem; margin-top: 0.85rem; }
 .ds { font-size: 0.78rem; color: var(--muted); }
 .ds strong { color: var(--text); font-weight: 700; }
 
-/* SEASONS */
 .seasons-wrap { margin-top: 1.25rem; }
 .seasons-wrap h3 { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.4rem; }
 .seasons-row { display: flex; gap: 0.75rem; overflow-x: auto; scrollbar-width: none; }
 .seasons-row::-webkit-scrollbar { display: none; }
-.season-card {
-  flex-shrink: 0; width: 160px; border-radius: 8px; overflow: hidden;
-  border: 1px solid var(--border); cursor: pointer; transition: border-color 0.2s;
-  position: relative;
-}
+.season-card { flex-shrink: 0; width: 160px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); cursor: pointer; transition: border-color 0.2s; position: relative; }
 .season-card.active { border-color: var(--accent); }
 .season-card:hover { border-color: var(--accent); }
 .sc-img { width: 100%; height: 80px; object-fit: cover; display: block; background: var(--border); }
 .sc-label { position: absolute; inset: 0; background: rgba(13,13,18,0.55); display: flex; align-items: center; justify-content: center; padding: 0.5rem; }
 .sc-label span { font-size: 0.85rem; font-weight: 700; text-align: center; text-shadow: 0 1px 4px rgba(0,0,0,0.8); }
 
-/* EPISODE SIDEBAR */
-.ep-sidebar-head {
-  padding: 1rem 1rem 0.5rem;
-  border-bottom: 1px solid var(--border);
-  display: flex; align-items: center; justify-content: space-between;
-}
+.ep-sidebar-head { padding: 1rem 1rem 0.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
 .ep-sidebar-head h3 { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); }
-.ep-filter-input {
-  background: var(--card); border: 1px solid var(--border);
-  border-radius: 6px; padding: 0.3rem 0.6rem;
-  color: var(--text); font-family: var(--font-body); font-size: 0.78rem; font-weight: 500;
-  outline: none; width: 130px; transition: border-color 0.15s;
-}
+.ep-filter-input { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 0.3rem 0.6rem; color: var(--text); font-family: var(--font-body); font-size: 0.78rem; font-weight: 500; outline: none; width: 130px; transition: border-color 0.15s; }
 .ep-filter-input:focus { border-color: var(--accent); }
 .ep-page-btns { display: flex; gap: 0.35rem; padding: 0.5rem 1rem; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
-.ep-page-btn {
-  background: var(--card); border: 1px solid var(--border);
-  color: var(--muted); border-radius: 5px; padding: 0.2rem 0.6rem;
-  font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: all 0.15s;
-}
+.ep-page-btn { background: var(--card); border: 1px solid var(--border); color: var(--muted); border-radius: 5px; padding: 0.2rem 0.6rem; font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: all 0.15s; }
 .ep-page-btn:hover, .ep-page-btn.active { border-color: var(--accent); color: var(--accent); }
 .ep-scroll { height: calc(100vh - var(--nav-h) - 200px); overflow-y: auto; padding: 0.5rem; }
 .ep-scroll::-webkit-scrollbar { width: 4px; }
 .ep-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-.ep-item {
-  display: flex; gap: 0.6rem; padding: 0.5rem 0.5rem;
-  border-radius: 7px; cursor: pointer; transition: background 0.15s;
-  border: 1px solid transparent; margin-bottom: 4px;
-}
+.ep-item { display: flex; gap: 0.6rem; padding: 0.5rem 0.5rem; border-radius: 7px; cursor: pointer; transition: background 0.15s; border: 1px solid transparent; margin-bottom: 4px; }
 .ep-item:hover { background: var(--card); border-color: var(--border); }
 .ep-item.active { background: rgba(232,109,176,0.1); border-color: var(--accent); }
 .ep-thumb { width: 80px; height: 50px; object-fit: cover; border-radius: 5px; background: var(--border); flex-shrink: 0; position: relative; }
-.ep-thumb-num {
-  position: absolute; bottom: 3px; left: 3px;
-  background: rgba(13,13,18,0.85); border-radius: 3px;
-  padding: 0px 5px; font-size: 0.68rem; font-weight: 800;
-}
+.ep-thumb-num { position: absolute; bottom: 3px; left: 3px; background: rgba(13,13,18,0.85); border-radius: 3px; padding: 0px 5px; font-size: 0.68rem; font-weight: 800; }
 .ep-item-info { flex: 1; min-width: 0; }
 .ep-item-title { font-size: 0.82rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ep-item-desc { font-size: 0.72rem; color: var(--muted); margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.4; }
 .ep-item-date { font-size: 0.68rem; color: var(--muted); margin-top: 4px; }
 
-/* RELATED SIDEBAR */
 .related-wrap { padding: 1rem; border-top: 1px solid var(--border); }
 .rel-title { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.4rem; }
 .rel-title::before { content: '›'; color: var(--accent); }
@@ -625,7 +571,6 @@ nav {
 .rel-live { display: inline-block; width: 6px; height: 6px; background: #4ade80; border-radius: 50%; margin-right: 3px; }
 .rel-meta { font-size: 0.7rem; color: var(--muted); margin-top: 3px; font-weight: 500; }
 
-/* COMMENTS */
 .comments-wrap { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border); }
 .comments-hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
 .comments-hd h3 { font-size: 1rem; font-weight: 800; display: flex; align-items: center; gap: 0.5rem; letter-spacing: -0.01em; }
@@ -636,20 +581,11 @@ nav {
 .comment-form { display: flex; gap: 0.75rem; margin-bottom: 1.25rem; }
 .comment-avatar { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--accent2)); display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: 800; color: #fff; flex-shrink: 0; }
 .comment-input-wrap { flex: 1; }
-.comment-input-wrap textarea {
-  width: 100%; background: var(--surface); border: 1px solid var(--border);
-  border-radius: 8px; padding: 0.6rem 0.9rem; color: var(--text);
-  font-family: var(--font-body); font-size: 0.88rem; resize: none; outline: none;
-  min-height: 60px; transition: border-color 0.2s; line-height: 1.5;
-}
+.comment-input-wrap textarea { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem 0.9rem; color: var(--text); font-family: var(--font-body); font-size: 0.88rem; resize: none; outline: none; min-height: 60px; transition: border-color 0.2s; line-height: 1.5; }
 .comment-input-wrap textarea:focus { border-color: var(--accent); }
 .comment-input-wrap textarea::placeholder { color: var(--muted); }
 .comment-submit-row { display: flex; justify-content: flex-end; margin-top: 0.4rem; }
-.comment-submit {
-  background: var(--accent); color: #fff; border: none;
-  border-radius: 6px; padding: 0.4rem 1.1rem; font-family: var(--font-body);
-  font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: all 0.2s;
-}
+.comment-submit { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 0.4rem 1.1rem; font-family: var(--font-body); font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: all 0.2s; }
 .comment-submit:hover { background: var(--blossom2); }
 .comment-login-prompt { text-align: center; padding: 1rem; color: var(--muted); font-size: 0.88rem; }
 .comment-login-prompt a { color: var(--accent); cursor: pointer; text-decoration: underline; font-weight: 600; }
@@ -665,12 +601,7 @@ nav {
 .ca-btn { background: none; border: none; color: var(--muted); font-size: 0.75rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.25rem; transition: color 0.15s; font-family: var(--font-body); }
 .ca-btn:hover { color: var(--accent); }
 
-/* Comments error/notice */
-.comments-notice {
-  background: rgba(232,109,176,0.08); border: 1px solid rgba(232,109,176,0.2);
-  border-radius: 8px; padding: 0.75rem 1rem; font-size: 0.82rem; color: var(--muted);
-  margin-bottom: 0.75rem; line-height: 1.5;
-}
+.comments-notice { background: rgba(232,109,176,0.08); border: 1px solid rgba(232,109,176,0.2); border-radius: 8px; padding: 0.75rem 1rem; font-size: 0.82rem; color: var(--muted); margin-bottom: 0.75rem; line-height: 1.5; }
 .comments-notice a { color: var(--accent); text-decoration: underline; cursor: pointer; }
 
 /* ── AUTH MODAL ──────────────────────────────────────────────────── */
@@ -688,40 +619,47 @@ nav {
 @keyframes modalIn { from{transform:scale(0.95);opacity:0} to{transform:scale(1);opacity:1} }
 .modal-close { position: absolute; top: 1rem; right: 1rem; background: none; border: none; color: var(--muted); font-size: 1.2rem; cursor: pointer; transition: color 0.15s; }
 .modal-close:hover { color: var(--text); }
+
+/* Modal logo: use the text SVG */
 .modal-logo {
   text-align: center; margin-bottom: 1.25rem;
-  display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+  display: flex; align-items: center; justify-content: center;
 }
-.modal-logo img { width: 28px; height: 28px; }
-.modal-logo span { font-family: var(--font-display); font-size: 1.6rem; font-weight: 900; background: linear-gradient(135deg, #ffb7d5, #e86db0); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.modal-logo-img {
+  height: 36px; width: auto;
+  object-fit: contain;
+  animation: logoEntrance 0.4s ease both;
+  filter: drop-shadow(0 0 8px rgba(232,109,176,0.35));
+}
+.modal-logo-fallback {
+  font-family: var(--font-display); font-size: 1.6rem; font-weight: 900;
+  background: linear-gradient(135deg, #ffb7d5, #e86db0);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  display: none;
+}
+.modal-logo-img.errored { display: none; }
+.modal-logo-img.errored ~ .modal-logo-fallback { display: block; }
+
 .modal-title { font-size: 1.1rem; font-weight: 800; text-align: center; margin-bottom: 1.5rem; }
 .modal-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 1.25rem; }
 .modal-tab { flex: 1; text-align: center; background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); font-family: var(--font-body); font-size: 0.9rem; font-weight: 700; padding: 0.5rem; cursor: pointer; transition: all 0.15s; margin-bottom: -1px; }
 .modal-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 .form-group { margin-bottom: 0.85rem; }
 .form-group label { display: block; font-size: 0.8rem; font-weight: 700; color: var(--muted); margin-bottom: 0.35rem; text-transform: uppercase; letter-spacing: 0.5px; }
-.form-group input {
-  width: 100%; background: var(--surface); border: 1px solid var(--border);
-  border-radius: 7px; padding: 0.55rem 0.9rem; color: var(--text);
-  font-family: var(--font-body); font-size: 0.9rem; outline: none;
-  transition: border-color 0.2s;
-}
+.form-group input { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: 0.55rem 0.9rem; color: var(--text); font-family: var(--font-body); font-size: 0.9rem; outline: none; transition: border-color 0.2s; }
 .form-group input:focus { border-color: var(--accent); }
-.modal-submit {
-  width: 100%; background: var(--accent); color: #fff; border: none;
-  border-radius: 8px; padding: 0.65rem; font-family: var(--font-body);
-  font-size: 0.95rem; font-weight: 700; cursor: pointer; transition: all 0.2s; margin-top: 0.5rem;
-}
+.modal-submit { width: 100%; background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 0.65rem; font-family: var(--font-body); font-size: 0.95rem; font-weight: 700; cursor: pointer; transition: all 0.2s; margin-top: 0.5rem; }
 .modal-submit:hover { background: var(--blossom2); }
 .modal-error { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: #ef4444; border-radius: 6px; padding: 0.5rem 0.75rem; font-size: 0.82rem; margin-bottom: 0.75rem; display: none; }
 .modal-error.show { display: block; }
+
 .modal-divider {
   display: flex; align-items: center; gap: 0.75rem; margin: 1rem 0;
   color: var(--muted); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.5px;
 }
-.modal-divider::before, .modal-divider::after {
-  content: \'\'; flex: 1; height: 1px; background: var(--border);
-}
+.modal-divider::before, .modal-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+/* Google sign-in button */
 .btn-google {
   width: 100%; background: #fff; color: #1f1f1f; border: 1px solid #dadce0;
   border-radius: 8px; padding: 0.6rem; font-family: var(--font-body);
@@ -731,6 +669,8 @@ nav {
 }
 .btn-google:hover { background: #f8f8f8; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
 .btn-google svg { width: 18px; height: 18px; flex-shrink: 0; }
+
+/* Support link in modal */
 .modal-support {
   text-align: center; margin-top: 1.25rem; padding-top: 1rem;
   border-top: 1px solid var(--border);
@@ -740,43 +680,17 @@ nav {
 .modal-support a:hover { text-decoration: underline; }
 
 /* ── SERVER SWITCHER ─────────────────────────────────────────────── */
-.server-bar {
-  display: flex; align-items: center; gap: 0.75rem;
-  padding: 0.65rem 0; margin-bottom: 0.75rem;
-  flex-wrap: wrap;
-}
-.server-label {
-  font-size: 0.72rem; font-weight: 800; letter-spacing: 0.8px;
-  color: var(--muted); text-transform: uppercase; flex-shrink: 0;
-}
+.server-bar { display: flex; align-items: center; gap: 0.75rem; padding: 0.65rem 0; margin-bottom: 0.75rem; flex-wrap: wrap; }
+.server-label { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.8px; color: var(--muted); text-transform: uppercase; flex-shrink: 0; }
 .server-group { display: flex; gap: 0.4rem; flex-wrap: wrap; }
-.server-btn {
-  display: flex; align-items: center; gap: 0.4rem;
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 7px; padding: 0.35rem 0.85rem;
-  font-family: var(--font-body); font-size: 0.8rem; font-weight: 700;
-  color: var(--muted); cursor: pointer; transition: all 0.18s;
-  white-space: nowrap;
-}
+.server-btn { display: flex; align-items: center; gap: 0.4rem; background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: 0.35rem 0.85rem; font-family: var(--font-body); font-size: 0.8rem; font-weight: 700; color: var(--muted); cursor: pointer; transition: all 0.18s; white-space: nowrap; }
 .server-btn:hover { border-color: var(--accent); color: var(--text); }
 .server-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(232,109,176,0.1); }
-.server-btn .srv-dot {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: var(--muted); flex-shrink: 0; transition: background 0.18s;
-}
+.server-btn .srv-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); flex-shrink: 0; transition: background 0.18s; }
 .server-btn.active .srv-dot { background: var(--accent); }
-.server-divider {
-  width: 1px; height: 20px; background: var(--border); flex-shrink: 0; margin: 0 0.1rem;
-}
-.dub-toggle {
-  display: flex; background: var(--surface); border: 1px solid var(--border);
-  border-radius: 7px; overflow: hidden; flex-shrink: 0; margin-left: auto;
-}
-.dub-btn {
-  background: none; border: none; padding: 0.35rem 0.8rem;
-  font-family: var(--font-body); font-size: 0.78rem; font-weight: 800;
-  letter-spacing: 0.5px; color: var(--muted); cursor: pointer; transition: all 0.15s;
-}
+.server-divider { width: 1px; height: 20px; background: var(--border); flex-shrink: 0; margin: 0 0.1rem; }
+.dub-toggle { display: flex; background: var(--surface); border: 1px solid var(--border); border-radius: 7px; overflow: hidden; flex-shrink: 0; margin-left: auto; }
+.dub-btn { background: none; border: none; padding: 0.35rem 0.8rem; font-family: var(--font-body); font-size: 0.78rem; font-weight: 800; letter-spacing: 0.5px; color: var(--muted); cursor: pointer; transition: all 0.15s; }
 .dub-btn.active { background: var(--accent); color: #fff; }
 
 /* SKELETON */
@@ -784,14 +698,7 @@ nav {
 @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
 
 /* TOAST */
-.toast {
-  position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 999;
-  background: var(--card); border: 1px solid var(--border);
-  border-radius: 10px; padding: 0.75rem 1.25rem;
-  font-size: 0.88rem; font-weight: 600; box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-  transform: translateY(20px); opacity: 0; transition: all 0.3s;
-  pointer-events: none;
-}
+.toast { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 999; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem 1.25rem; font-size: 0.88rem; font-weight: 600; box-shadow: 0 4px 20px rgba(0,0,0,0.4); transform: translateY(20px); opacity: 0; transition: all 0.3s; pointer-events: none; }
 .toast.show { transform: translateY(0); opacity: 1; }
 .toast.success { border-left: 3px solid #4ade80; }
 .toast.error { border-left: 3px solid #ef4444; }
@@ -817,11 +724,11 @@ nav {
 <!-- MAINTENANCE OVERLAY -->
 <div id="maintenance-overlay">
   <div class="maint-petals" id="maintPetals"></div>
-  <img class="maint-blossom-icon"
-    src="icons/AniBlossom.svg"
+  <!-- Use text logo for maintenance screen -->
+  <img class="maint-logo-img"
+    src="icons/AniBlossom_text.svg"
     alt="AniBlossom"
-    onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span style=\'font-size:3rem\'>🌸</span>')">
-  <div class="maint-logo">AniBlossom</div>
+    onerror="this.classList.add('errored');this.insertAdjacentHTML('afterend','<div class=\'maint-logo-fallback\'>AniBlossom</div>')">
   <div class="maint-title">We're tending to the blossoms...</div>
   <p class="maint-sub">AniBlossom is currently undergoing scheduled maintenance. We'll be back in full bloom very soon — thank you for your patience! 🌸</p>
   <div class="maint-bar"><div class="maint-bar-fill"></div></div>
@@ -838,14 +745,15 @@ nav {
 <!-- NAV -->
 <nav>
   <div class="logo" onclick="showHome()">
-    <img class="logo-img"
-      src="icons/AniBlossom.svg"
+    <!-- Text logo in nav -->
+    <img class="logo-text-img"
+      src="icons/AniBlossom_text.svg"
       alt="AniBlossom"
-      onerror="this.style.display='none'">
-    AniBlossom
+      onerror="this.classList.add('errored');this.insertAdjacentHTML('afterend','<span class=\'logo-fallback\'>AniBlossom</span>')">
+    <span class="logo-fallback" style="display:none">AniBlossom</span>
   </div>
   <div class="nav-search">
-    <span class="search-icon"> </span>
+    <span class="search-icon">🔍</span>
     <input type="text" id="searchInput" placeholder="Search Anime..." autocomplete="off">
     <div class="search-dropdown" id="searchDropdown"></div>
   </div>
@@ -884,7 +792,6 @@ nav {
 
 <!-- HOME VIEW -->
 <div id="home-view">
-  <!-- HERO -->
   <div class="hero" id="hero" onclick="playHero()">
     <div class="hero-bg" id="heroBg"></div>
     <div class="hero-grad"></div>
@@ -903,7 +810,6 @@ nav {
 
   <div class="home-body">
     <div class="home-main">
-      <!-- History -->
       <div class="history-bar" id="historySection" style="display:none">
         <div class="section-hd">
           <h2>Your Watchlist<strong>Watch History</strong></h2>
@@ -912,7 +818,6 @@ nav {
         <div class="hist-row" id="histRow"></div>
       </div>
 
-      <!-- List tabs -->
       <div class="list-tabs">
         <button class="ltab active" id="ltab-newest" onclick="switchTab('newest')">Newest</button>
         <button class="ltab" id="ltab-popular" onclick="switchTab('popular')">Popular</button>
@@ -925,7 +830,6 @@ nav {
       </div>
     </div>
 
-    <!-- Sidebar -->
     <div class="home-sidebar">
       <div class="sb-section">
         <div class="sb-title">Top Airing</div>
@@ -942,7 +846,6 @@ nav {
       <div class="ep-breadcrumb">
         <button class="back-btn" onclick="showHome()">← Back</button>
       </div>
-      <!-- Server & Sub/Dub switcher -->
       <div class="server-bar">
         <span class="server-label">Server</span>
         <div class="server-group">
@@ -964,7 +867,6 @@ nav {
         <iframe id="playerIframe" allowfullscreen allow="autoplay; encrypted-media; picture-in-picture"></iframe>
       </div>
 
-      <!-- Episode info -->
       <div class="watch-info">
         <div class="ep-meta">
           <span class="ep-date" id="epDate"></span>
@@ -977,20 +879,14 @@ nav {
         <div class="ep-desc" id="epDesc"></div>
       </div>
 
-      <!-- Anime detail -->
       <div class="anime-detail" id="animeDetail"></div>
-
-      <!-- Seasons -->
       <div class="seasons-wrap" id="seasonsWrap" style="display:none">
         <h3>📀 Seasons</h3>
         <div class="seasons-row" id="seasonsRow"></div>
       </div>
-
-      <!-- Comments -->
       <div class="comments-wrap" id="commentsWrap"></div>
     </div>
 
-    <!-- Episode sidebar -->
     <div class="watch-sidebar">
       <div class="ep-sidebar-head">
         <h3>Episodes</h3>
@@ -998,7 +894,6 @@ nav {
       </div>
       <div class="ep-page-btns" id="epPageBtns"></div>
       <div class="ep-scroll" id="epScroll"></div>
-
       <div class="related-wrap" id="relatedWrap"></div>
     </div>
   </div>
@@ -1010,17 +905,35 @@ nav {
 <div class="modal-overlay" id="authModal">
   <div class="modal">
     <button class="modal-close" onclick="closeAuthModal()">✕</button>
+
+    <!-- Logo: text SVG -->
     <div class="modal-logo">
-      <img src="icons/AniBlossom.svg"
-        alt="AniBlossom" width="28" height="28"
-        onerror="this.style.display='none'">
-      <span>AniBlossom</span>
+      <img class="modal-logo-img"
+        src="icons/AniBlossom_text.svg"
+        alt="AniBlossom"
+        onerror="this.classList.add('errored');this.nextElementSibling.style.display='block'">
+      <span class="modal-logo-fallback">AniBlossom</span>
     </div>
+
     <div class="modal-tabs">
       <button class="modal-tab active" id="mtab-login" onclick="switchAuthTab('login')">Log In</button>
       <button class="modal-tab" id="mtab-register" onclick="switchAuthTab('register')">Sign Up</button>
     </div>
     <div class="modal-error" id="authError"></div>
+
+    <!-- Google sign-in button (shown for both tabs) -->
+    <button class="btn-google" onclick="doGoogleSignIn()">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+      </svg>
+      Continue with Google
+    </button>
+
+    <div class="modal-divider">or</div>
+
     <div id="loginForm">
       <div class="form-group"><label>Email</label><input type="email" id="loginEmail" placeholder="you@example.com"></div>
       <div class="form-group"><label>Password</label><input type="password" id="loginPass" placeholder="••••••••"></div>
@@ -1031,6 +944,10 @@ nav {
       <div class="form-group"><label>Email</label><input type="email" id="regEmail" placeholder="you@example.com"></div>
       <div class="form-group"><label>Password</label><input type="password" id="regPass" placeholder="••••••••"></div>
       <button class="modal-submit" onclick="doRegister()">Create Account</button>
+    </div>
+
+    <div class="modal-support">
+      Need help? Contact us at <a href="mailto:support@aniblossom.me">support@aniblossom.me</a>
     </div>
   </div>
 </div>
@@ -1044,7 +961,7 @@ const PROVIDERS = [
   {
     id: "filmu",
     name: "FilmU",
-    supportsAudio: false, // sub only, no toggle
+    supportsAudio: false,
     getUrl: (anilistId, season, episode, audio) => {
       return `https://embed.filmu.in/anime/${anilistId}/${season}/${episode}`;
     }
@@ -1052,7 +969,7 @@ const PROVIDERS = [
   {
     id: "animplay",
     name: "AnimPlay",
-    supportsAudio: true, // sub & dub
+    supportsAudio: true,
     getUrl: (anilistId, season, episode, audio = "sub") => {
       return `https://animeplay.cfd/stream/ani/${anilistId}/${episode}/${audio}`;
     }
@@ -1104,7 +1021,7 @@ let epPageSize = 20, epPageCurrent = 0;
 let allEpItems = [];
 let commentsUnsub = null;
 
-// ── History (localStorage) ────────────────────────────────────
+// ── History ───────────────────────────────────────────────────────
 function getHistory() { try { return JSON.parse(localStorage.getItem('ab_history') || '[]'); } catch{ return []; } }
 function addHistory(anime, ep) {
   let h = getHistory().filter(x => x.id !== anime.id);
@@ -1141,7 +1058,7 @@ function openFromHistory(i) {
   });
 }
 
-// ── Hero ─────────────────────────────────────────────────────────
+// ── Hero ──────────────────────────────────────────────────────────
 function setHero(list) {
   heroList = list; currentHeroIdx = 0;
   renderHero();
@@ -1178,7 +1095,7 @@ function updateHeroDots() { document.querySelectorAll('.hero-dot').forEach((d,i)
 function playHero() { if(heroList[currentHeroIdx]) openWatch(heroList[currentHeroIdx]); }
 function goToAnimeInfo() { if(heroList[currentHeroIdx]) openWatch(heroList[currentHeroIdx]); }
 
-// ── Grid ─────────────────────────────────────────────────────────
+// ── Grid ──────────────────────────────────────────────────────────
 function renderGrid(list) {
   const grid = document.getElementById('animeGrid');
   if (!list.length) { grid.innerHTML = '<p style="color:var(--muted);padding:2rem;grid-column:1/-1">No results found.</p>'; return; }
@@ -1274,14 +1191,12 @@ function openWatch(anime, ep=1) {
   currentSeason = 1;
   totalEps = anime.episodes || 24;
 
-  // Reset server state
   currentServer = 'filmu';
   currentDub = 'sub';
   document.getElementById('srv-filmu').classList.add('active');
   document.getElementById('srv-animplay').classList.remove('active');
   document.getElementById('dub-sub').classList.add('active');
   document.getElementById('dub-dub').classList.remove('active');
-  // FilmU is sub-only, hide dub toggle
   document.getElementById('dubToggle').style.display = 'none';
 
   showWatch();
@@ -1301,7 +1216,6 @@ function buildEmbedUrl(server, anilistId, season, ep, dub) {
 function loadPlayer(season, ep) {
   const url = buildEmbedUrl(currentServer, currentAnime.id, season, ep, currentDub);
   document.getElementById('playerIframe').src = url;
-  // AnimPlay supports sub/dub; FilmU is sub only
   const provider = getProvider(currentServer);
   document.getElementById('dubToggle').style.display = provider.supportsAudio ? 'flex' : 'none';
 }
@@ -1433,8 +1347,6 @@ async function loadRelated(id) {
 }
 
 // ── Comments ──────────────────────────────────────────────────────
-// Fixed: use getDocs (non-realtime) with only a 'where' clause to avoid needing a composite index.
-// We sort client-side so no composite index (key + createdAt) is required in Firestore.
 function renderComments(animeId, ep) {
   const wrap = document.getElementById('commentsWrap');
   if (commentsUnsub) { commentsUnsub(); commentsUnsub = null; }
@@ -1467,8 +1379,6 @@ function renderComments(animeId, ep) {
     </div>`}
     <div class="comments-list" id="commentsList"><div style="color:var(--muted);font-size:0.85rem;padding:0.5rem">Loading comments...</div></div>`;
 
-  // Use onSnapshot with only a where clause (no orderBy) to avoid composite index requirement.
-  // Sort client-side instead.
   try {
     const q = fb.query(
       fb.collection(fb.db, 'comments'),
@@ -1482,7 +1392,6 @@ function renderComments(animeId, ep) {
           list.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;padding:0.5rem">No comments yet. Be the first! 🌸</div>';
           return;
         }
-        // Sort client-side: newest first
         const docs = snap.docs.slice().sort((a,b) => {
           const ta = a.data().createdAt?.toMillis?.() || 0;
           const tb = b.data().createdAt?.toMillis?.() || 0;
@@ -1510,25 +1419,22 @@ function renderComments(animeId, ep) {
         }).join('');
       },
       err => {
-        // Firestore error (e.g. missing index or permission denied)
         const list = document.getElementById('commentsList');
         if (!list) return;
         if (err.code === 'failed-precondition' || err.message?.includes('index')) {
           list.innerHTML = `<div class="comments-notice">
             Comments require a Firestore index. Please
             <a href="https://console.firebase.google.com/project/aniblossom-f0d34/firestore/indexes" target="_blank" rel="noopener">create the index here</a>,
-            then reload. If you just deployed, it may take a minute to build.
+            then reload.
           </div>`;
         } else {
           list.innerHTML = `<div style="color:var(--muted);font-size:0.85rem;padding:0.5rem">Could not load comments. Check Firestore rules.</div>`;
-          console.error('Comments error:', err);
         }
       }
     );
   } catch(e) {
     const list = document.getElementById('commentsList');
     if (list) list.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;padding:0.5rem">Could not load comments.</div>';
-    console.error('Comments setup error:', e);
   }
 }
 
@@ -1541,8 +1447,7 @@ async function postComment(key) {
   const fb = window.__fb;
   try {
     await fb.addDoc(fb.collection(fb.db,'comments'), {
-      key,
-      text,
+      key, text,
       userId: user.uid,
       userName: user.displayName || 'Anonymous',
       createdAt: fb.serverTimestamp(),
@@ -1551,12 +1456,8 @@ async function postComment(key) {
     ta.value = '';
     showToast('Comment posted! 🌸', 'success');
   } catch(e) {
-    console.error('Post comment error:', e);
-    if (e.code === 'permission-denied') {
-      showToast('Permission denied. Check Firestore rules.', 'error');
-    } else {
-      showToast('Failed to post comment.', 'error');
-    }
+    if (e.code === 'permission-denied') showToast('Permission denied. Check Firestore rules.', 'error');
+    else showToast('Failed to post comment.', 'error');
   }
 }
 
@@ -1590,6 +1491,22 @@ function switchAuthTab(tab) {
 function showAuthError(msg) {
   const el = document.getElementById('authError');
   el.textContent = msg; el.classList.add('show');
+}
+
+// Google Sign-In
+async function doGoogleSignIn() {
+  const fb = window.__fb;
+  if (!fb) return;
+  try {
+    const result = await fb.signInWithPopup(fb.auth, fb.googleProvider);
+    closeAuthModal();
+    showToast(`Welcome, ${result.user.displayName || 'friend'}! 🌸`, 'success');
+    updateAuthUI(result.user);
+  } catch(e) {
+    if (e.code !== 'auth/popup-closed-by-user') {
+      showAuthError(e.message.replace('Firebase: ','').replace(/\(.*\)/,''));
+    }
+  }
 }
 
 async function doLogin() {
