@@ -31,9 +31,10 @@
   const googleProvider = new GoogleAuthProvider();
   window.__fb = { auth, db, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup, googleProvider, doc, getDoc, addDoc, collection, query, where, orderBy, onSnapshot, serverTimestamp, getDocs };
 
+  // FIX: read maintenanceMode (boolean) field
   const settingsRef = doc(db, 'admin', 'settings');
   onSnapshot(settingsRef, (snap) => {
-    const inMaintenance = snap.exists() && snap.data().maintenance === true;
+    const inMaintenance = snap.exists() && snap.data().maintenanceMode === true;
     document.getElementById('maintenance-overlay').style.display = inMaintenance ? 'flex' : 'none';
     document.getElementById('app').style.display = inMaintenance ? 'none' : 'block';
   }, () => {
@@ -822,7 +823,7 @@ nav {
     <span class="logo-fallback" style="display:none">AniBlossom</span>
   </div>
   <div class="nav-search">
-    <span class="search-icon"> </span>
+    <span class="search-icon">⌕</span>
     <input type="text" id="searchInput" placeholder="Search Anime..." autocomplete="off">
     <div class="search-dropdown" id="searchDropdown"></div>
   </div>
@@ -870,7 +871,6 @@ nav {
       <div class="hero-genres" id="heroGenres"></div>
       <div class="hero-desc" id="heroDesc"></div>
       <div class="hero-actions" onclick="event.stopPropagation()">
-        <!-- FIX: inline SVG play icon instead of ▶ unicode (renders as emoji on iOS/Android) -->
         <button class="btn-watch" onclick="playHero()">
           <svg width="11" height="13" viewBox="0 0 11 13" fill="currentColor" style="flex-shrink:0;margin-right:1px" aria-hidden="true"><path d="M0 0L11 6.5L0 13Z"/></svg>
           Watch Now
@@ -1082,12 +1082,12 @@ const AL = 'https://graphql.anilist.co';
 const FIELDS = `id title{romaji english native} coverImage{large extraLarge} bannerImage description(asHtml:false) episodes averageScore genres status startDate{year} format studios{nodes{name}} nextAiringEpisode{episode}`;
 
 // ── Cache (1-hour TTL) ────────────────────────────────────────────
-const CACHE_TTL = 60 * 60 * 1000; // 1 hour in ms
+const CACHE_TTL = 60 * 60 * 1000;
 
 function cacheSet(key, data) {
   try {
     localStorage.setItem('ab_cache_' + key, JSON.stringify({ ts: Date.now(), data }));
-  } catch(e) { /* storage full, skip */ }
+  } catch(e) {}
 }
 function cacheGet(key) {
   try {
@@ -1135,7 +1135,6 @@ async function fetchTopAiring() {
   return cachedGql('topairing', `query{Page(perPage:10){media(type:ANIME,sort:POPULARITY_DESC,status:RELEASING,isAdult:false){id title{romaji english} coverImage{large} nextAiringEpisode{episode} averageScore format episodes}}}`);
 }
 async function fetchSearch(q) {
-  // search results are not cached (always fresh)
   return gql(`query($q:String){Page(perPage:8){media(type:ANIME,search:$q,isAdult:false){${FIELDS}}}}`, {q});
 }
 async function fetchRelated(id) {
@@ -1143,7 +1142,7 @@ async function fetchRelated(id) {
   return cachedGql(key, `query($id:Int){Media(id:$id){recommendations(perPage:6){nodes{mediaRecommendation{id title{romaji english} coverImage{large} episodes averageScore status format}}}}}`,{id});
 }
 
-// Fetch streaming episode data (titles + thumbnails from AniList streamingEpisodes)
+// FIX: reverse streamingEpisodes so EP 1 = oldest, not newest
 async function fetchEpisodeMeta(animeId) {
   const key = `epmeta_${animeId}`;
   const cached = cacheGet(key);
@@ -1153,7 +1152,8 @@ async function fetchEpisodeMeta(animeId) {
       `query($id:Int){Media(id:$id){streamingEpisodes{title thumbnail site}}}`,
       {id: animeId}
     );
-    const eps = data?.Media?.streamingEpisodes || [];
+    // AniList returns newest-first — reverse so index 0 = Episode 1
+    const eps = (data?.Media?.streamingEpisodes || []).slice().reverse();
     cacheSet(key, eps);
     return eps;
   } catch(e) { return []; }
@@ -1167,7 +1167,7 @@ let currentServer = 'filmu';
 let currentDub = 'sub';
 let epPageSize = 20, epPageCurrent = 0;
 let allEpItems = [];
-let currentEpMeta = []; // streamingEpisodes data: [{title, thumbnail, site}]
+let currentEpMeta = [];
 let commentsUnsub = null;
 
 // ── History ───────────────────────────────────────────────────────
@@ -1424,15 +1424,13 @@ async function buildEpSidebar(anime) {
   epPageCurrent = 0;
   currentEpMeta = [];
   renderEpPages();
-  renderEpList(allEpItems.slice(0, epPageSize), currentEp); // render immediately (no meta yet)
+  renderEpList(allEpItems.slice(0, epPageSize), currentEp);
 
-  // Fetch episode titles + thumbnails in background
   const meta = await fetchEpisodeMeta(anime.id);
   if (meta && meta.length) {
-    // AniList streamingEpisodes are newest-first sometimes; sort by extracting ep number from title
     currentEpMeta = meta;
     const curSlice = allEpItems.slice(epPageCurrent * epPageSize, (epPageCurrent + 1) * epPageSize);
-    renderEpList(curSlice, currentEp); // re-render with meta
+    renderEpList(curSlice, currentEp);
   }
 }
 
@@ -1454,13 +1452,10 @@ function switchEpPage(i, btn) {
   renderEpList(slice, currentEp);
 }
 
-// Try to match episode meta by number extracted from title string e.g. "Episode 3" or "Ep. 3"
 function getEpMeta(epNum) {
   if (!currentEpMeta.length) return null;
-  // Try index-based first (most reliable when count matches)
   const byIndex = currentEpMeta[epNum - 1];
   if (byIndex) return byIndex;
-  // Fallback: search title string for the episode number
   return currentEpMeta.find(m => {
     const match = m.title && m.title.match(/(\d+)/);
     return match && parseInt(match[1]) === epNum;
@@ -1477,7 +1472,7 @@ function renderEpList(eps, activeEp) {
     return `
     <div class="ep-item ${ep===activeEp?'active':''}" id="ep-item-${ep}" onclick="selectEp(${ep})">
       <div class="ep-thumb" style="${hasThumb ? `background-image:url('${escHtml(thumb)}');background-size:cover;background-position:center` : ''}">
-        ${!hasThumb ? `<span class="ep-thumb-num">EP ${ep}</span>` : `<span class="ep-thumb-num">EP ${ep}</span>`}
+        <span class="ep-thumb-num">EP ${ep}</span>
       </div>
       <div class="ep-item-info">
         <div class="ep-item-title">${escHtml(title)}</div>
@@ -1493,7 +1488,6 @@ function selectEp(ep) {
   document.querySelectorAll('.ep-item').forEach(el=>el.classList.remove('active'));
   const el = document.getElementById('ep-item-'+ep);
   if(el){ el.classList.add('active'); el.scrollIntoView({block:'nearest'}); }
-  // Update episode title in header — use meta title if available
   const meta = getEpMeta(ep);
   const epLabel = meta?.title || `Episode ${ep}`;
   document.getElementById('epTitle').textContent = `${ep}. ${escHtml(epLabel)}`;
@@ -1503,7 +1497,6 @@ function selectEp(ep) {
 
 function filterEps(q) {
   const lq = q.toLowerCase();
-  // Filter by ep number OR episode title
   const filtered = allEpItems.filter(ep => {
     if (String(ep).includes(q)) return true;
     const meta = getEpMeta(ep);
@@ -1656,7 +1649,6 @@ function showHome() {
   document.getElementById('playerIframe').src = '';
   if (commentsUnsub) { commentsUnsub(); commentsUnsub = null; }
   renderHistory();
-  // Update URL back to root without reload
   history.pushState(null, '', '/');
 }
 function showWatch() {
@@ -1674,15 +1666,32 @@ function show404(path) {
   window.scrollTo(0,0);
 }
 
-// ── 404 / Hash Routing ────────────────────────────────────────────
-const VALID_PATHS = ['/', '/index.html', ''];
+// ── Routing — custom domain safe ──────────────────────────────────
+// On a custom domain (aniblossom.me) every URL path that isn't "/"
+// is a real 404. Since this is a single-page app served from one
+// file, we only show the 404 screen for paths we genuinely don't
+// handle, and never for "/" or "/index.html".
+// We do NOT check the path on first load because the server should
+// already be redirecting unknown paths to index.html (via a 404.html
+// redirect or Netlify/Vercel/Cloudflare _redirects rule). If the
+// server sends the user to index.html for any path, we just show
+// the home page — the 404 view is only triggered when JS navigation
+// within the app hits an unknown route (which currently never
+// happens since all navigation is state-based, not URL-based).
+
+const VALID_PATHS = new Set(['/', '/index.html', '']);
 
 function handleRoute() {
   const path = window.location.pathname;
-  if (!VALID_PATHS.includes(path)) {
-    show404(path);
+  // Normalise trailing slash
+  const clean = path.endsWith('/') && path.length > 1 ? path.slice(0, -1) : path;
+
+  if (!VALID_PATHS.has(clean) && !VALID_PATHS.has(path)) {
+    // Only show 404 if we're NOT already watching something
+    if (document.getElementById('watch-view').style.display !== 'block') {
+      show404(path);
+    }
   } else {
-    // Only show home if we're not already in a watch session
     if (document.getElementById('watch-view').style.display !== 'block') {
       document.getElementById('home-view').style.display = 'block';
       document.getElementById('notfound-view').style.display = 'none';
@@ -1691,8 +1700,9 @@ function handleRoute() {
 }
 
 window.addEventListener('popstate', handleRoute);
-// Run on load — after a short tick so Firebase/app init fires first
-window.addEventListener('load', () => setTimeout(handleRoute, 50));
+// Delay so Firebase/app init fires first, and also so the
+// maintenance overlay has a chance to resolve before we touch views.
+window.addEventListener('load', () => setTimeout(handleRoute, 100));
 
 // ── Auth ──────────────────────────────────────────────────────────
 function openAuthModal(tab='login') {
