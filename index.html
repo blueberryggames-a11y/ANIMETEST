@@ -5,14 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AniBlossom — Watch Anime Free</title>
 
-<!-- Favicon: official AniBlossom SVG logo -->
 <link rel="icon" type="image/svg+xml" href="icons/AniBlossom_logo.svg">
 <link rel="alternate icon" href="icons/AniBlossom_logo.svg">
 
-<!-- Font: Plus Jakarta Sans -->
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
 
-<!-- Firebase -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
   import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
@@ -89,7 +86,6 @@ body::before {
   pointer-events: none; z-index: 0;
 }
 
-/* ── LOGO ANIMATIONS ─────────────────────────────────────────────── */
 @keyframes logoEntrance {
   from { opacity: 0; transform: translateY(-6px) scale(0.96); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
@@ -115,7 +111,6 @@ body::before {
   100% { background-position: 200% center; }
 }
 
-/* ── LOGO IMAGE STYLES ───────────────────────────────────────────── */
 .logo-text-img {
   height: 28px;
   width: auto;
@@ -128,10 +123,9 @@ body::before {
 }
 .logo-text-img:hover {
   filter: drop-shadow(0 0 16px rgba(232,109,176,0.8));
-  animation: logoEntrance 0s, logoFloat 4s ease-in-out infinite; /* keep float */
+  animation: logoEntrance 0s, logoFloat 4s ease-in-out infinite;
 }
 
-/* Fallback text logo (shown if SVG fails) */
 .logo-fallback {
   display: none;
   font-family: var(--font-display);
@@ -620,7 +614,6 @@ nav {
 .modal-close { position: absolute; top: 1rem; right: 1rem; background: none; border: none; color: var(--muted); font-size: 1.2rem; cursor: pointer; transition: color 0.15s; }
 .modal-close:hover { color: var(--text); }
 
-/* Modal logo: use the text SVG */
 .modal-logo {
   text-align: center; margin-bottom: 1.25rem;
   display: flex; align-items: center; justify-content: center;
@@ -659,7 +652,6 @@ nav {
 }
 .modal-divider::before, .modal-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 
-/* Google sign-in button */
 .btn-google {
   width: 100%; background: #fff; color: #1f1f1f; border: 1px solid #dadce0;
   border-radius: 8px; padding: 0.6rem; font-family: var(--font-body);
@@ -670,7 +662,6 @@ nav {
 .btn-google:hover { background: #f8f8f8; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
 .btn-google svg { width: 18px; height: 18px; flex-shrink: 0; }
 
-/* Support link in modal */
 .modal-support {
   text-align: center; margin-top: 1.25rem; padding-top: 1rem;
   border-top: 1px solid var(--border);
@@ -692,6 +683,85 @@ nav {
 .dub-toggle { display: flex; background: var(--surface); border: 1px solid var(--border); border-radius: 7px; overflow: hidden; flex-shrink: 0; margin-left: auto; }
 .dub-btn { background: none; border: none; padding: 0.35rem 0.8rem; font-family: var(--font-body); font-size: 0.78rem; font-weight: 800; letter-spacing: 0.5px; color: var(--muted); cursor: pointer; transition: all 0.15s; }
 .dub-btn.active { background: var(--accent); color: #fff; }
+
+/* ── 404 VIEW ────────────────────────────────────────────────────── */
+#notfound-view { display: none; }
+.nf-wrap {
+  min-height: calc(100vh - var(--nav-h) - 44px);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: 3rem 2rem;
+  position: relative; overflow: hidden;
+}
+.nf-wrap::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse 500px 300px at 50% 40%, rgba(232,109,176,0.06) 0%, transparent 70%);
+  pointer-events: none;
+}
+.nf-code {
+  font-family: var(--font-display);
+  font-size: clamp(6rem, 18vw, 10rem);
+  font-weight: 900;
+  line-height: 1;
+  background: linear-gradient(135deg, #ffb7d5 0%, #e86db0 50%, #c94d94 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 0.25rem;
+  position: relative; z-index: 1;
+  letter-spacing: -0.04em;
+}
+.nf-petals {
+  display: flex; gap: 0.5rem; justify-content: center;
+  margin-bottom: 1.5rem; position: relative; z-index: 1;
+}
+.nf-petal {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent); opacity: 0.3;
+}
+.nf-petal:nth-child(2) { opacity: 0.6; width: 10px; height: 10px; }
+.nf-petal:nth-child(3) { opacity: 1; width: 12px; height: 12px; }
+.nf-petal:nth-child(4) { opacity: 0.6; width: 10px; height: 10px; }
+.nf-petal:nth-child(5) { opacity: 0.3; width: 8px; height: 8px; }
+.nf-title {
+  font-size: clamp(1.3rem, 4vw, 2rem);
+  font-weight: 800; margin-bottom: 0.75rem;
+  position: relative; z-index: 1;
+  letter-spacing: -0.02em;
+}
+.nf-sub {
+  font-size: 0.95rem; color: var(--muted);
+  max-width: 400px; line-height: 1.75;
+  margin-bottom: 2.5rem;
+  position: relative; z-index: 1;
+}
+.nf-sub span {
+  color: var(--accent); font-weight: 700;
+  background: rgba(232,109,176,0.1);
+  padding: 1px 8px; border-radius: 4px;
+  border: 1px solid rgba(232,109,176,0.25);
+  font-family: monospace; font-size: 0.9em;
+}
+.nf-actions {
+  display: flex; gap: 0.75rem; flex-wrap: wrap; justify-content: center;
+  position: relative; z-index: 1;
+}
+.nf-home-btn {
+  background: var(--accent); color: #fff; border: none;
+  border-radius: 8px; padding: 0.7rem 1.75rem;
+  font-family: var(--font-body); font-size: 0.95rem; font-weight: 700;
+  cursor: pointer; transition: all 0.2s;
+  display: flex; align-items: center; gap: 0.5rem;
+}
+.nf-home-btn:hover { background: var(--blossom2); box-shadow: 0 0 24px rgba(232,109,176,0.4); transform: translateY(-1px); }
+.nf-home-btn svg { flex-shrink: 0; }
+.nf-bg-text {
+  position: absolute; bottom: -1rem; left: 50%; transform: translateX(-50%);
+  font-family: var(--font-display); font-size: clamp(8rem, 25vw, 18rem);
+  font-weight: 900; color: rgba(232,109,176,0.03);
+  white-space: nowrap; pointer-events: none; user-select: none;
+  letter-spacing: -0.04em; z-index: 0;
+}
 
 /* SKELETON */
 .skeleton { background: linear-gradient(90deg, var(--card) 25%, var(--surface) 50%, var(--card) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 6px; }
@@ -716,6 +786,7 @@ nav {
   .nav-tabs { display: none; }
   .watch-main, .anime-grid-wrap, .history-bar { padding-left: 0.75rem; padding-right: 0.75rem; }
   .hero-content { padding: 1.5rem 1.25rem 1.75rem; }
+  .nf-code { font-size: clamp(5rem, 22vw, 8rem); }
 }
 </style>
 </head>
@@ -724,7 +795,6 @@ nav {
 <!-- MAINTENANCE OVERLAY -->
 <div id="maintenance-overlay">
   <div class="maint-petals" id="maintPetals"></div>
-  <!-- Use text logo for maintenance screen -->
   <img class="maint-logo-img"
     src="icons/AniBlossom_text.svg"
     alt="AniBlossom"
@@ -745,7 +815,6 @@ nav {
 <!-- NAV -->
 <nav>
   <div class="logo" onclick="showHome()">
-    <!-- Text logo in nav -->
     <img class="logo-text-img"
       src="icons/AniBlossom_text.svg"
       alt="AniBlossom"
@@ -801,7 +870,11 @@ nav {
       <div class="hero-genres" id="heroGenres"></div>
       <div class="hero-desc" id="heroDesc"></div>
       <div class="hero-actions" onclick="event.stopPropagation()">
-        <button class="btn-watch" onclick="playHero()">▶ Watch Now</button>
+        <!-- FIX: inline SVG play icon instead of ▶ unicode (renders as emoji on iOS/Android) -->
+        <button class="btn-watch" onclick="playHero()">
+          <svg width="11" height="13" viewBox="0 0 11 13" fill="currentColor" style="flex-shrink:0;margin-right:1px" aria-hidden="true"><path d="M0 0L11 6.5L0 13Z"/></svg>
+          Watch Now
+        </button>
         <button class="btn-info" onclick="goToAnimeInfo()">ℹ Details</button>
       </div>
     </div>
@@ -881,7 +954,7 @@ nav {
 
       <div class="anime-detail" id="animeDetail"></div>
       <div class="seasons-wrap" id="seasonsWrap" style="display:none">
-        <h3>📀 Seasons</h3>
+        <h3>Seasons</h3>
         <div class="seasons-row" id="seasonsRow"></div>
       </div>
       <div class="comments-wrap" id="commentsWrap"></div>
@@ -899,6 +972,32 @@ nav {
   </div>
 </div>
 
+<!-- 404 VIEW -->
+<div id="notfound-view">
+  <div class="nf-wrap">
+    <div class="nf-bg-text">404</div>
+    <div class="nf-code">404</div>
+    <div class="nf-petals">
+      <div class="nf-petal"></div>
+      <div class="nf-petal"></div>
+      <div class="nf-petal"></div>
+      <div class="nf-petal"></div>
+      <div class="nf-petal"></div>
+    </div>
+    <div class="nf-title">Page not found</div>
+    <p class="nf-sub" id="nfSub">
+      The page <span id="nfPath">/this</span> doesn't exist around here.<br>
+      Might've been removed, renamed, or never bloomed.
+    </p>
+    <div class="nf-actions">
+      <button class="nf-home-btn" onclick="showHome()">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true"><path d="M7 1L1 6.5V13h4V9h4v4h4V6.5L7 1Z"/></svg>
+        Back to Home
+      </button>
+    </div>
+  </div>
+</div>
+
 </div><!-- /app -->
 
 <!-- AUTH MODAL -->
@@ -906,7 +1005,6 @@ nav {
   <div class="modal">
     <button class="modal-close" onclick="closeAuthModal()">✕</button>
 
-    <!-- Logo: text SVG -->
     <div class="modal-logo">
       <img class="modal-logo-img"
         src="icons/AniBlossom_text.svg"
@@ -921,7 +1019,6 @@ nav {
     </div>
     <div class="modal-error" id="authError"></div>
 
-    <!-- Google sign-in button (shown for both tabs) -->
     <button class="btn-google" onclick="doGoogleSignIn()">
       <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -980,7 +1077,7 @@ function getProvider(id) {
   return PROVIDERS.find(p => p.id === id) || PROVIDERS[0];
 }
 
-// ── AniList ──────────────────────────────────────────────────────
+// ── AniList ───────────────────────────────────────────────────────
 const AL = 'https://graphql.anilist.co';
 const FIELDS = `id title{romaji english native} coverImage{large extraLarge} bannerImage description(asHtml:false) episodes averageScore genres status startDate{year} format studios{nodes{name}} nextAiringEpisode{episode}`;
 
@@ -1011,7 +1108,7 @@ async function fetchRelated(id) {
   return gql(`query($id:Int){Media(id:$id){recommendations(perPage:6){nodes{mediaRecommendation{id title{romaji english} coverImage{large} episodes averageScore status format}}}}}`,{id});
 }
 
-// ── State ────────────────────────────────────────────────────────
+// ── State ─────────────────────────────────────────────────────────
 let heroList = [], currentHeroIdx = 0, heroTimer = null;
 let currentTab = 'newest', currentPage = 1, currentGenre = null;
 let currentAnime = null, currentEp = 1, currentSeason = 1, totalEps = 0;
@@ -1226,7 +1323,7 @@ function switchServer(server) {
   document.getElementById('srv-animplay').classList.toggle('active', server === 'animplay');
   loadPlayer(currentSeason, currentEp);
   const provider = getProvider(server);
-  showToast(`Switched to ${provider.name} ${server === 'animplay' ? '🎌' : '🎬'}`, 'success');
+  showToast(`Switched to ${provider.name}`, 'success');
 }
 
 function switchDub(type) {
@@ -1234,7 +1331,7 @@ function switchDub(type) {
   document.getElementById('dub-sub').classList.toggle('active', type === 'sub');
   document.getElementById('dub-dub').classList.toggle('active', type === 'dub');
   loadPlayer(currentSeason, currentEp);
-  showToast(type === 'dub' ? 'Switched to Dub 🔊' : 'Switched to Sub 🈯', 'success');
+  showToast(type === 'dub' ? 'Switched to Dub' : 'Switched to Sub', 'success');
 }
 
 function renderWatchInfo(anime, ep) {
@@ -1359,7 +1456,7 @@ function renderComments(animeId, ep) {
 
   wrap.innerHTML = `
     <div class="comments-hd">
-      <h3>💬 Comments</h3>
+      <h3>Comments</h3>
       <div class="comment-tabs">
         <button class="ctab active">Episode ${ep}</button>
       </div>
@@ -1389,7 +1486,7 @@ function renderComments(animeId, ep) {
         const list = document.getElementById('commentsList');
         if (!list) return;
         if (snap.empty) {
-          list.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;padding:0.5rem">No comments yet. Be the first! 🌸</div>';
+          list.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;padding:0.5rem">No comments yet. Be the first!</div>';
           return;
         }
         const docs = snap.docs.slice().sort((a,b) => {
@@ -1454,7 +1551,7 @@ async function postComment(key) {
       likes: 0
     });
     ta.value = '';
-    showToast('Comment posted! 🌸', 'success');
+    showToast('Comment posted!', 'success');
   } catch(e) {
     if (e.code === 'permission-denied') showToast('Permission denied. Check Firestore rules.', 'error');
     else showToast('Failed to post comment.', 'error');
@@ -1465,15 +1562,47 @@ async function postComment(key) {
 function showHome() {
   document.getElementById('home-view').style.display = 'block';
   document.getElementById('watch-view').style.display = 'none';
+  document.getElementById('notfound-view').style.display = 'none';
   document.getElementById('playerIframe').src = '';
   if (commentsUnsub) { commentsUnsub(); commentsUnsub = null; }
   renderHistory();
+  // Update URL back to root without reload
+  history.pushState(null, '', '/');
 }
 function showWatch() {
   document.getElementById('home-view').style.display = 'none';
   document.getElementById('watch-view').style.display = 'block';
+  document.getElementById('notfound-view').style.display = 'none';
   window.scrollTo(0,0);
 }
+function show404(path) {
+  document.getElementById('home-view').style.display = 'none';
+  document.getElementById('watch-view').style.display = 'none';
+  document.getElementById('notfound-view').style.display = 'block';
+  const el = document.getElementById('nfPath');
+  if (el) el.textContent = path || window.location.pathname;
+  window.scrollTo(0,0);
+}
+
+// ── 404 / Hash Routing ────────────────────────────────────────────
+const VALID_PATHS = ['/', '/index.html', ''];
+
+function handleRoute() {
+  const path = window.location.pathname;
+  if (!VALID_PATHS.includes(path)) {
+    show404(path);
+  } else {
+    // Only show home if we're not already in a watch session
+    if (document.getElementById('watch-view').style.display !== 'block') {
+      document.getElementById('home-view').style.display = 'block';
+      document.getElementById('notfound-view').style.display = 'none';
+    }
+  }
+}
+
+window.addEventListener('popstate', handleRoute);
+// Run on load — after a short tick so Firebase/app init fires first
+window.addEventListener('load', () => setTimeout(handleRoute, 50));
 
 // ── Auth ──────────────────────────────────────────────────────────
 function openAuthModal(tab='login') {
@@ -1493,14 +1622,13 @@ function showAuthError(msg) {
   el.textContent = msg; el.classList.add('show');
 }
 
-// Google Sign-In
 async function doGoogleSignIn() {
   const fb = window.__fb;
   if (!fb) return;
   try {
     const result = await fb.signInWithPopup(fb.auth, fb.googleProvider);
     closeAuthModal();
-    showToast(`Welcome, ${result.user.displayName || 'friend'}! 🌸`, 'success');
+    showToast(`Welcome, ${result.user.displayName || 'friend'}!`, 'success');
     updateAuthUI(result.user);
   } catch(e) {
     if (e.code !== 'auth/popup-closed-by-user') {
@@ -1517,7 +1645,7 @@ async function doLogin() {
   try {
     await fb.signInWithEmailAndPassword(fb.auth, email, pass);
     closeAuthModal();
-    showToast('Welcome back! 🌸', 'success');
+    showToast('Welcome back!', 'success');
   } catch(e) { showAuthError(e.message.replace('Firebase: ','').replace(/\(.*\)/,'')); }
 }
 
@@ -1532,7 +1660,7 @@ async function doRegister() {
     await fb.updateProfile(cred.user, { displayName: name });
     window.__currentUser = cred.user;
     closeAuthModal();
-    showToast('Account created! Welcome to AniBlossom 🌸', 'success');
+    showToast('Account created! Welcome to AniBlossom', 'success');
     updateAuthUI(cred.user);
   } catch(e) { showAuthError(e.message.replace('Firebase: ','').replace(/\(.*\)/,'')); }
 }
@@ -1554,7 +1682,7 @@ window.updateAuthUI = function(user) {
 async function doSignOut() {
   const fb = window.__fb;
   await fb.signOut(fb.auth);
-  showToast('Signed out. See you soon! 🌸', 'success');
+  showToast('Signed out. See you soon!', 'success');
 }
 
 // ── Search ────────────────────────────────────────────────────────
@@ -1596,7 +1724,7 @@ function pickSearch(anime) {
 function shareAnime() {
   const url = window.location.href;
   if (navigator.share) navigator.share({ title: currentAnime?.title?.english, url });
-  else { navigator.clipboard.writeText(url); showToast('Link copied! 🌸', 'success'); }
+  else { navigator.clipboard.writeText(url); showToast('Link copied!', 'success'); }
 }
 
 // ── Maintenance petals ────────────────────────────────────────────
