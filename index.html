@@ -1081,9 +1081,41 @@ function getProvider(id) {
 const AL = 'https://graphql.anilist.co';
 const FIELDS = `id title{romaji english native} coverImage{large extraLarge} bannerImage description(asHtml:false) episodes averageScore genres status startDate{year} format studios{nodes{name}} nextAiringEpisode{episode}`;
 
+// ── Cache (1-hour TTL) ────────────────────────────────────────────
+const CACHE_TTL = 60 * 60 * 1000; // 1 hour in ms
+
+function cacheSet(key, data) {
+  try {
+    localStorage.setItem('ab_cache_' + key, JSON.stringify({ ts: Date.now(), data }));
+  } catch(e) { /* storage full, skip */ }
+}
+function cacheGet(key) {
+  try {
+    const raw = localStorage.getItem('ab_cache_' + key);
+    if (!raw) return null;
+    const { ts, data } = JSON.parse(raw);
+    if (Date.now() - ts > CACHE_TTL) { localStorage.removeItem('ab_cache_' + key); return null; }
+    return data;
+  } catch(e) { return null; }
+}
+function cacheClear() {
+  const keys = Object.keys(localStorage).filter(k => k.startsWith('ab_cache_'));
+  keys.forEach(k => localStorage.removeItem(k));
+  showToast('Cache cleared — fetching fresh data', 'success');
+  location.reload();
+}
+
 async function gql(query, vars={}) {
   const r = await fetch(AL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({query, variables:vars}) });
   return (await r.json()).data;
+}
+
+async function cachedGql(cacheKey, query, vars={}) {
+  const hit = cacheGet(cacheKey);
+  if (hit) return hit;
+  const data = await gql(query, vars);
+  cacheSet(cacheKey, data);
+  return data;
 }
 
 async function fetchList(tab, page, genre) {
@@ -1093,19 +1125,38 @@ async function fetchList(tab, page, genre) {
   else if (tab==='popular') sort = 'POPULARITY_DESC';
   else sort = 'SCORE_DESC';
   const query = `query($p:Int){Page(page:$p,perPage:20){media(type:ANIME,sort:${sort},isAdult:false${g}){${FIELDS}}}}`;
-  return gql(query, {p:page});
+  const key = `list_${tab}_${page}_${genre||'all'}`;
+  return cachedGql(key, query, {p:page});
 }
 async function fetchTrending() {
-  return gql(`query{Page(perPage:5){media(type:ANIME,sort:TRENDING_DESC,isAdult:false){${FIELDS}}}}`);
+  return cachedGql('trending', `query{Page(perPage:5){media(type:ANIME,sort:TRENDING_DESC,isAdult:false){${FIELDS}}}}`);
 }
 async function fetchTopAiring() {
-  return gql(`query{Page(perPage:10){media(type:ANIME,sort:POPULARITY_DESC,status:RELEASING,isAdult:false){id title{romaji english} coverImage{large} nextAiringEpisode{episode} averageScore format episodes}}}`);
+  return cachedGql('topairing', `query{Page(perPage:10){media(type:ANIME,sort:POPULARITY_DESC,status:RELEASING,isAdult:false){id title{romaji english} coverImage{large} nextAiringEpisode{episode} averageScore format episodes}}}`);
 }
 async function fetchSearch(q) {
+  // search results are not cached (always fresh)
   return gql(`query($q:String){Page(perPage:8){media(type:ANIME,search:$q,isAdult:false){${FIELDS}}}}`, {q});
 }
 async function fetchRelated(id) {
-  return gql(`query($id:Int){Media(id:$id){recommendations(perPage:6){nodes{mediaRecommendation{id title{romaji english} coverImage{large} episodes averageScore status format}}}}}`,{id});
+  const key = `related_${id}`;
+  return cachedGql(key, `query($id:Int){Media(id:$id){recommendations(perPage:6){nodes{mediaRecommendation{id title{romaji english} coverImage{large} episodes averageScore status format}}}}}`,{id});
+}
+
+// Fetch streaming episode data (titles + thumbnails from AniList streamingEpisodes)
+async function fetchEpisodeMeta(animeId) {
+  const key = `epmeta_${animeId}`;
+  const cached = cacheGet(key);
+  if (cached) return cached;
+  try {
+    const data = await gql(
+      `query($id:Int){Media(id:$id){streamingEpisodes{title thumbnail site}}}`,
+      {id: animeId}
+    );
+    const eps = data?.Media?.streamingEpisodes || [];
+    cacheSet(key, eps);
+    return eps;
+  } catch(e) { return []; }
 }
 
 // ── State ─────────────────────────────────────────────────────────
@@ -1116,6 +1167,7 @@ let currentServer = 'filmu';
 let currentDub = 'sub';
 let epPageSize = 20, epPageCurrent = 0;
 let allEpItems = [];
+let currentEpMeta = []; // streamingEpisodes data: [{title, thumbnail, site}]
 let commentsUnsub = null;
 
 // ── History ───────────────────────────────────────────────────────
@@ -1366,12 +1418,22 @@ function renderWatchInfo(anime, ep) {
 }
 
 // ── Episode Sidebar ───────────────────────────────────────────────
-function buildEpSidebar(anime) {
+async function buildEpSidebar(anime) {
   totalEps = anime.episodes || 24;
   allEpItems = Array.from({length: totalEps}, (_,i) => i+1);
   epPageCurrent = 0;
+  currentEpMeta = [];
   renderEpPages();
-  renderEpList(allEpItems.slice(0, epPageSize), currentEp);
+  renderEpList(allEpItems.slice(0, epPageSize), currentEp); // render immediately (no meta yet)
+
+  // Fetch episode titles + thumbnails in background
+  const meta = await fetchEpisodeMeta(anime.id);
+  if (meta && meta.length) {
+    // AniList streamingEpisodes are newest-first sometimes; sort by extracting ep number from title
+    currentEpMeta = meta;
+    const curSlice = allEpItems.slice(epPageCurrent * epPageSize, (epPageCurrent + 1) * epPageSize);
+    renderEpList(curSlice, currentEp); // re-render with meta
+  }
 }
 
 function renderEpPages() {
@@ -1392,18 +1454,37 @@ function switchEpPage(i, btn) {
   renderEpList(slice, currentEp);
 }
 
+// Try to match episode meta by number extracted from title string e.g. "Episode 3" or "Ep. 3"
+function getEpMeta(epNum) {
+  if (!currentEpMeta.length) return null;
+  // Try index-based first (most reliable when count matches)
+  const byIndex = currentEpMeta[epNum - 1];
+  if (byIndex) return byIndex;
+  // Fallback: search title string for the episode number
+  return currentEpMeta.find(m => {
+    const match = m.title && m.title.match(/(\d+)/);
+    return match && parseInt(match[1]) === epNum;
+  }) || null;
+}
+
 function renderEpList(eps, activeEp) {
   const scroll = document.getElementById('epScroll');
-  scroll.innerHTML = eps.map(ep => `
+  scroll.innerHTML = eps.map(ep => {
+    const meta = getEpMeta(ep);
+    const thumb = meta?.thumbnail || '';
+    const title = meta?.title || `Episode ${ep}`;
+    const hasThumb = !!thumb;
+    return `
     <div class="ep-item ${ep===activeEp?'active':''}" id="ep-item-${ep}" onclick="selectEp(${ep})">
-      <div class="ep-thumb">
-        <span class="ep-thumb-num">EP ${ep}</span>
+      <div class="ep-thumb" style="${hasThumb ? `background-image:url('${escHtml(thumb)}');background-size:cover;background-position:center` : ''}">
+        ${!hasThumb ? `<span class="ep-thumb-num">EP ${ep}</span>` : `<span class="ep-thumb-num">EP ${ep}</span>`}
       </div>
       <div class="ep-item-info">
-        <div class="ep-item-title">Episode ${ep}</div>
+        <div class="ep-item-title">${escHtml(title)}</div>
         <div class="ep-item-date">${currentAnime?.startDate?.year||''}</div>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function selectEp(ep) {
@@ -1412,13 +1493,22 @@ function selectEp(ep) {
   document.querySelectorAll('.ep-item').forEach(el=>el.classList.remove('active'));
   const el = document.getElementById('ep-item-'+ep);
   if(el){ el.classList.add('active'); el.scrollIntoView({block:'nearest'}); }
-  document.getElementById('epTitle').textContent = `${ep}. ${currentAnime.title.english||currentAnime.title.romaji}`;
+  // Update episode title in header — use meta title if available
+  const meta = getEpMeta(ep);
+  const epLabel = meta?.title || `Episode ${ep}`;
+  document.getElementById('epTitle').textContent = `${ep}. ${escHtml(epLabel)}`;
   addHistory(currentAnime, ep);
   renderComments(currentAnime.id, ep);
 }
 
 function filterEps(q) {
-  const filtered = allEpItems.filter(ep => String(ep).includes(q));
+  const lq = q.toLowerCase();
+  // Filter by ep number OR episode title
+  const filtered = allEpItems.filter(ep => {
+    if (String(ep).includes(q)) return true;
+    const meta = getEpMeta(ep);
+    return meta?.title?.toLowerCase().includes(lq);
+  });
   renderEpList(filtered, currentEp);
 }
 
