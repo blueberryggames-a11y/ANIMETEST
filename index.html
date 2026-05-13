@@ -923,11 +923,11 @@ nav {
         <span class="server-label">Server</span>
         <div class="server-group">
           <button class="server-btn active" id="srv-filmu" onclick="switchServer('filmu')">
-            <span class="srv-dot"></span> FilmU
+            <span class="srv-dot"></span> Server 1
           </button>
           <div class="server-divider"></div>
           <button class="server-btn" id="srv-animplay" onclick="switchServer('animplay')">
-            <span class="srv-dot"></span> AnimPlay
+            <span class="srv-dot"></span> Server 2
           </button>
         </div>
         <div class="dub-toggle" id="dubToggle">
@@ -1057,7 +1057,7 @@ nav {
 const PROVIDERS = [
   {
     id: "filmu",
-    name: "Server 1",
+    name: "FilMu",
     supportsAudio: false,
     getUrl: (anilistId, season, episode, audio) => {
       return `https://embed.filmu.in/anime/${anilistId}/${season}/${episode}`;
@@ -1065,7 +1065,7 @@ const PROVIDERS = [
   },
   {
     id: "animplay",
-    name: "Server 2",
+    name: "AnimPlay",
     supportsAudio: true,
     getUrl: (anilistId, season, episode, audio = "sub") => {
       return `https://animeplay.cfd/stream/ani/${anilistId}/${episode}/${audio}`;
