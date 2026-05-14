@@ -14,6 +14,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
   import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
   import { getFirestore, doc, getDoc, addDoc, collection, query, where, orderBy, onSnapshot, serverTimestamp, getDocs } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+  import { getDatabase, ref, onValue, onDisconnect, set, remove, push } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-database.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyChDl-zM0n-bi7oD3o3cSXro1E9PXVcZJ4",
@@ -22,15 +23,19 @@
     storageBucket: "aniblossom-f0d34.firebasestorage.app",
     messagingSenderId: "149563551782",
     appId: "1:149563551782:web:784edc8efcf4ee2a20b6e7",
-    measurementId: "G-XN8VWV9DQ1"
+    measurementId: "G-XN8VWV9DQ1",
+    databaseURL: "https://aniblossom-f0d34-default-rtdb.firebaseio.com"
   };
 
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const db = getFirestore(app);
+  const rtdb = getDatabase(app);
   const googleProvider = new GoogleAuthProvider();
-  window.__fb = { auth, db, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup, googleProvider, doc, getDoc, addDoc, collection, query, where, orderBy, onSnapshot, serverTimestamp, getDocs };
 
+  window.__fb = { auth, db, rtdb, ref, onValue, onDisconnect, set, remove, push, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup, googleProvider, doc, getDoc, addDoc, collection, query, where, orderBy, onSnapshot, serverTimestamp, getDocs };
+
+  // ── MAINTENANCE CHECK ─────────────────────────────────────────
   const settingsRef = doc(db, 'admin', 'settings');
   onSnapshot(settingsRef, (snap) => {
     const inMaintenance = snap.exists() && snap.data().maintenanceMode === true;
@@ -40,9 +45,41 @@
     document.getElementById('app').style.display = 'block';
   });
 
+  // ── AUTH STATE ────────────────────────────────────────────────
   onAuthStateChanged(auth, user => {
     window.__currentUser = user;
     window.updateAuthUI && window.updateAuthUI(user);
+  });
+
+  // ── LIVE VIEWER PRESENCE ──────────────────────────────────────
+  // Uses Firebase RTDB .info/connected for real-time presence
+  const connectedRef = ref(rtdb, '.info/connected');
+  const visitorsRef = ref(rtdb, 'visitors');
+
+  onValue(connectedRef, (snap) => {
+    if (snap.val() === true) {
+      // Create a unique slot for this visitor
+      const myRef = push(visitorsRef);
+      // Remove our slot when we disconnect
+      onDisconnect(myRef).remove();
+      // Mark ourselves as present
+      set(myRef, true);
+    }
+  });
+
+  // Listen to total visitor count in real time
+  onValue(visitorsRef, (snap) => {
+    const count = snap.exists() ? Object.keys(snap.val()).length : 0;
+    const el = document.getElementById('liveViewerCount');
+    if (el) {
+      el.textContent = count >= 1000
+        ? (count / 1000).toFixed(1) + 'k'
+        : count;
+      // Pulse animation on change
+      el.closest('.live-counter')?.classList.remove('pulse');
+      void el.closest('.live-counter')?.offsetWidth;
+      el.closest('.live-counter')?.classList.add('pulse');
+    }
   });
 </script>
 
@@ -109,6 +146,51 @@ body::before {
 @keyframes shimmerLogo {
   0%   { background-position: -200% center; }
   100% { background-position: 200% center; }
+}
+
+/* ── LIVE COUNTER ────────────────────────────────────────────────── */
+.live-counter {
+  display: flex;
+  align-items: center;
+  gap: 0.38rem;
+  background: rgba(232,109,176,0.07);
+  border: 1px solid rgba(232,109,176,0.2);
+  border-radius: 20px;
+  padding: 0.28rem 0.75rem 0.28rem 0.55rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--accent2);
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+  transition: border-color 0.3s;
+  cursor: default;
+  user-select: none;
+}
+.live-counter:hover {
+  border-color: rgba(232,109,176,0.45);
+}
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+  animation: livePulse 2s ease-in-out infinite;
+  box-shadow: 0 0 0 0 rgba(232,109,176,0.6);
+}
+@keyframes livePulse {
+  0%   { box-shadow: 0 0 0 0 rgba(232,109,176,0.6); }
+  50%  { box-shadow: 0 0 0 4px rgba(232,109,176,0); }
+  100% { box-shadow: 0 0 0 0 rgba(232,109,176,0); }
+}
+/* Quick flash on count update */
+@keyframes counterPulse {
+  0%   { background: rgba(232,109,176,0.07); }
+  40%  { background: rgba(232,109,176,0.18); }
+  100% { background: rgba(232,109,176,0.07); }
+}
+.live-counter.pulse {
+  animation: counterPulse 0.5s ease;
 }
 
 .logo-text-img {
@@ -805,6 +887,7 @@ nav {
   .watch-main, .anime-grid-wrap, .history-bar { padding-left: 0.75rem; padding-right: 0.75rem; }
   .hero-content { padding: 1.5rem 1.25rem 1.75rem; }
   .nf-code { font-size: clamp(5rem, 22vw, 8rem); }
+  .live-counter .live-label { display: none; }
 }
 </style>
 </head>
@@ -850,6 +933,12 @@ nav {
     <button class="ntab" id="ntab-top" onclick="switchTab('top')">TOP RATED</button>
   </div>
   <div class="nav-right" id="navRight">
+    <!-- Live viewer counter sits here, injected by updateAuthUI -->
+    <div class="live-counter" title="People watching right now">
+      <span class="live-dot"></span>
+      <span id="liveViewerCount">—</span>
+      <span class="live-label" style="color:var(--muted);font-weight:500"> watching</span>
+    </div>
     <button class="nav-btn" onclick="openAuthModal('login')">Log In</button>
     <button class="nav-btn primary" onclick="openAuthModal('register')">Sign Up</button>
   </div>
@@ -1011,7 +1100,7 @@ nav {
     </div>
     <div class="nf-title">Page not found</div>
     <p class="nf-sub" id="nfSub">
-      The page <span id="nfPath">/this</span> doesn't exist around here.<br>
+      The page <span id="nfPath">#/this</span> doesn't exist around here.<br>
       Might've been removed, renamed, or never bloomed.
     </p>
     <div class="nf-actions">
@@ -1109,12 +1198,10 @@ function getAnistreamBase() {
   return localStorage.getItem('anistream_worker') || ANISTREAM_DEFAULT;
 }
 
-// Cache: animeId → { animeSession, epData }
 const anistreamCache = {};
-
 let anistreamAnimeSession = null;
-let anistreamEpSessions = {};  // ep number → session string
-let anistreamEpData = [];      // full episode array from API
+let anistreamEpSessions = {};
+let anistreamEpData = [];
 
 async function anistreamFetch(path) {
   const url = getAnistreamBase() + path;
@@ -1123,25 +1210,19 @@ async function anistreamFetch(path) {
   return r.json();
 }
 
-/**
- * Find AniStream session for an anime using title search.
- * Tries multiple title variants for best match.
- */
 async function anistreamFindSession(anime) {
   const titles = [
     anime.title.english,
     anime.title.romaji,
-    // Strip subtitle after colon/parenthesis for cleaner search
     anime.title.english && anime.title.english.replace(/\s*[\(:].*/,'').trim(),
     anime.title.romaji && anime.title.romaji.replace(/\s*[\(:].*/,'').trim(),
-  ].filter((t, i, arr) => t && arr.indexOf(t) === i); // unique non-null
+  ].filter((t, i, arr) => t && arr.indexOf(t) === i);
 
   for (const q of titles) {
     try {
       const results = await anistreamFetch('/search?q=' + encodeURIComponent(q));
       if (!results || !results.length) continue;
       const lower = q.toLowerCase();
-      // Exact match first, then starts-with, then first result
       const best = results.find(r => (r.title||'').toLowerCase() === lower)
                 || results.find(r => (r.title||'').toLowerCase().startsWith(lower.split(' ')[0]))
                 || results[0];
@@ -1151,9 +1232,6 @@ async function anistreamFindSession(anime) {
   throw new Error('Not found on Server 3 for "' + (anime.title.english || anime.title.romaji) + '"');
 }
 
-/**
- * Fetch all episodes; returns array of { number, session, title, snapshot }
- */
 async function anistreamFetchEpisodes(animeSession) {
   const eps = await anistreamFetch('/episodes?session=' + encodeURIComponent(animeSession));
   return eps.map((ep, i) => ({
@@ -1169,9 +1247,6 @@ function anistreamEmbedUrl(animeSession, epSession, title) {
   return `${base}/embed?anime_session=${encodeURIComponent(animeSession)}&episode_session=${encodeURIComponent(epSession)}&title=${encodeURIComponent(title || '')}`;
 }
 
-/**
- * Main entry: load AniStream player + update episode sidebar with real data.
- */
 async function loadAnistreamPlayer(anime, epNumber) {
   const title = anime.title.english || anime.title.romaji;
   const cacheKey = String(anime.id);
@@ -1182,10 +1257,8 @@ async function loadAnistreamPlayer(anime, epNumber) {
     if (!anistreamCache[cacheKey]) {
       setAnistreamStatus('loading', 'Searching for anime...');
       const animeSession = await anistreamFindSession(anime);
-
       setAnistreamStatus('loading', 'Loading episodes...');
       const epData = await anistreamFetchEpisodes(animeSession);
-
       anistreamCache[cacheKey] = { animeSession, epData };
     }
 
@@ -1193,14 +1266,11 @@ async function loadAnistreamPlayer(anime, epNumber) {
     anistreamAnimeSession = cached.animeSession;
     anistreamEpData = cached.epData;
 
-    // Build number → session map
     anistreamEpSessions = {};
     anistreamEpData.forEach(ep => { anistreamEpSessions[ep.number] = ep.session; });
 
-    // Replace episode sidebar with real API data (real count + thumbnails + titles)
     renderAnistreamEpSidebar(anistreamEpData, epNumber);
 
-    // Find the episode object
     const epObj = anistreamEpData.find(e => e.number === epNumber)
                || anistreamEpData[epNumber - 1]
                || anistreamEpData[0];
@@ -1210,13 +1280,11 @@ async function loadAnistreamPlayer(anime, epNumber) {
     document.getElementById('playerIframe').src = anistreamEmbedUrl(anistreamAnimeSession, epObj.session, epLabel);
     setAnistreamStatus('ok', `Server 3 · ${anistreamEpData.length} eps`);
 
-    // Background prefetch of next episode
     const nextEp = anistreamEpData.find(e => e.number === epNumber + 1);
     if (nextEp) {
       fetch(getAnistreamBase() + '/prefetch?anime_session=' + encodeURIComponent(anistreamAnimeSession) + '&episode_session=' + encodeURIComponent(nextEp.session),
         { headers: { 'ngrok-skip-browser-warning': '1' } }).catch(() => {});
     }
-
   } catch (err) {
     setAnistreamStatus('error', 'Server 3 unavailable');
     showToast('Server 3: ' + err.message, 'error');
@@ -1224,15 +1292,10 @@ async function loadAnistreamPlayer(anime, epNumber) {
   }
 }
 
-/**
- * Render episode sidebar using real episode data from AniStream.
- * Replaces the AniList-based sidebar with actual episode count + thumbnails.
- */
 function renderAnistreamEpSidebar(epData, activeEp) {
   totalEps = epData.length;
   allEpItems = epData.map(e => e.number);
 
-  // Rebuild page buttons with real episode numbers
   const pages = Math.ceil(epData.length / epPageSize);
   const btns = document.getElementById('epPageBtns');
   if (pages <= 1) {
@@ -1292,8 +1355,8 @@ function selectEpAnistream(epNumber) {
   document.getElementById('epTitle').textContent = `${epNumber}. ${escHtml(epObj.title || 'Episode ' + epNumber)}`;
   addHistory(currentAnime, epNumber);
   renderComments(currentAnime.id, epNumber);
+  updateHash(currentAnime.id, epNumber);
 
-  // Prefetch next
   const nextEp = anistreamEpData.find(e => e.number === epNumber + 1);
   if (nextEp && anistreamAnimeSession) {
     fetch(getAnistreamBase() + '/prefetch?anime_session=' + encodeURIComponent(anistreamAnimeSession) + '&episode_session=' + encodeURIComponent(nextEp.session),
@@ -1369,6 +1432,10 @@ async function fetchRelated(id) {
   const key = `related_${id}`;
   return cachedGql(key, `query($id:Int){Media(id:$id){recommendations(perPage:6){nodes{mediaRecommendation{id title{romaji english} coverImage{large} episodes averageScore status format}}}}}`,{id});
 }
+async function fetchAnimeById(id) {
+  const key = `anime_${id}`;
+  return cachedGql(key, `query($id:Int){Media(id:$id){${FIELDS}}}`, {id});
+}
 
 async function fetchEpisodeMeta(animeId) {
   const key = `epmeta_${animeId}`;
@@ -1392,6 +1459,66 @@ let epPageSize = 20, epPageCurrent = 0;
 let allEpItems = [];
 let currentEpMeta = [];
 let commentsUnsub = null;
+let _suppressHashChange = false;
+
+// ── HASH ROUTING ──────────────────────────────────────────────────
+// Format: #/watch/{animeId}/{ep}  or  # (home)
+// This fixes: refresh restores state, back button works, shareable episode URLs,
+// and 404 shows for unknown hashes.
+
+function updateHash(animeId, ep) {
+  _suppressHashChange = true;
+  location.hash = `#/watch/${animeId}/${ep}`;
+  setTimeout(() => { _suppressHashChange = false; }, 50);
+}
+
+function clearHash() {
+  _suppressHashChange = true;
+  history.replaceState(null, '', location.pathname);
+  setTimeout(() => { _suppressHashChange = false; }, 50);
+}
+
+async function handleHashChange() {
+  if (_suppressHashChange) return;
+  const hash = location.hash;
+
+  // Home: empty hash or #home
+  if (!hash || hash === '#' || hash === '#/' || hash === '#home') {
+    if (document.getElementById('watch-view').style.display === 'block') {
+      _internalShowHome();
+    }
+    return;
+  }
+
+  // Watch route: #/watch/{animeId}/{ep}
+  const watchMatch = hash.match(/^#\/watch\/(\d+)\/(\d+)$/);
+  if (watchMatch) {
+    const animeId = parseInt(watchMatch[1]);
+    const ep = parseInt(watchMatch[2]);
+    // Only reload if different anime/ep or if on home view
+    if (document.getElementById('home-view').style.display !== 'none' ||
+        !currentAnime || currentAnime.id !== animeId || currentEp !== ep) {
+      try {
+        const data = await fetchAnimeById(animeId);
+        if (data?.Media) {
+          _suppressHashChange = true;
+          openWatch(data.Media, ep);
+          setTimeout(() => { _suppressHashChange = false; }, 100);
+        } else {
+          show404(hash);
+        }
+      } catch(e) {
+        show404(hash);
+      }
+    }
+    return;
+  }
+
+  // Unknown hash → 404
+  show404(hash);
+}
+
+window.addEventListener('hashchange', handleHashChange);
 
 // ── History ───────────────────────────────────────────────────────
 function getHistory() { try { return JSON.parse(localStorage.getItem('ab_history') || '[]'); } catch{ return []; } }
@@ -1561,7 +1688,6 @@ function openWatch(anime, ep=1) {
   currentSeason = 1;
   totalEps = anime.episodes || 24;
 
-  // Reset server state
   currentServer = 'filmu';
   currentDub = 'sub';
   ['srv-filmu','srv-animplay','srv-anistream'].forEach(id => {
@@ -1573,7 +1699,6 @@ function openWatch(anime, ep=1) {
   document.getElementById('dubToggle').style.display = 'none';
   hideAnistreamStatus();
 
-  // Clear AniStream state when switching anime
   anistreamAnimeSession = null;
   anistreamEpSessions = {};
   anistreamEpData = [];
@@ -1585,6 +1710,7 @@ function openWatch(anime, ep=1) {
   loadRelated(anime.id);
   renderComments(anime.id, ep);
   addHistory(anime, ep);
+  updateHash(anime.id, ep);
 }
 
 function buildEmbedUrl(server, anilistId, season, ep, dub) {
@@ -1614,7 +1740,6 @@ function switchServer(server) {
     showToast('Switched to Server 3', 'success');
   } else {
     hideAnistreamStatus();
-    // Restore AniList-based episode sidebar when leaving Server 3
     if (anistreamEpData.length) buildEpSidebar(currentAnime);
     loadPlayer(currentSeason, currentEp);
     showToast(`Switched to ${getProvider(server).name}`, 'success');
@@ -1659,7 +1784,7 @@ function renderWatchInfo(anime, ep) {
     </div>`;
 }
 
-// ── Episode Sidebar (AniList-based, used for Server 1 & 2) ────────
+// ── Episode Sidebar ───────────────────────────────────────────────
 async function buildEpSidebar(anime) {
   totalEps = anime.episodes || 24;
   allEpItems = Array.from({length: totalEps}, (_,i) => i+1);
@@ -1735,10 +1860,10 @@ function selectEp(ep) {
   document.getElementById('epTitle').textContent = `${ep}. ${escHtml(epLabel)}`;
   addHistory(currentAnime, ep);
   renderComments(currentAnime.id, ep);
+  updateHash(currentAnime.id, ep);
 }
 
 function filterEps(q) {
-  // If on AniStream, filter the real episode data
   if (currentServer === 'anistream' && anistreamEpData.length) {
     const lq = q.toLowerCase();
     const filtered = anistreamEpData.filter(ep =>
@@ -1884,7 +2009,7 @@ async function postComment(key) {
 }
 
 // ── Views ─────────────────────────────────────────────────────────
-function showHome() {
+function _internalShowHome() {
   document.getElementById('home-view').style.display = 'block';
   document.getElementById('watch-view').style.display = 'none';
   document.getElementById('notfound-view').style.display = 'none';
@@ -1892,40 +2017,28 @@ function showHome() {
   if (commentsUnsub) { commentsUnsub(); commentsUnsub = null; }
   hideAnistreamStatus();
   renderHistory();
-  history.pushState(null, '', '/');
 }
+
+function showHome() {
+  _internalShowHome();
+  clearHash();
+}
+
 function showWatch() {
   document.getElementById('home-view').style.display = 'none';
   document.getElementById('watch-view').style.display = 'block';
   document.getElementById('notfound-view').style.display = 'none';
   window.scrollTo(0,0);
 }
+
 function show404(path) {
   document.getElementById('home-view').style.display = 'none';
   document.getElementById('watch-view').style.display = 'none';
   document.getElementById('notfound-view').style.display = 'block';
   const el = document.getElementById('nfPath');
-  if (el) el.textContent = path || window.location.pathname;
+  if (el) el.textContent = path || location.hash || window.location.pathname;
   window.scrollTo(0,0);
 }
-
-// ── Routing ───────────────────────────────────────────────────────
-const VALID_PATHS = new Set(['/', '/index.html', '']);
-
-function handleRoute() {
-  const path = window.location.pathname;
-  const clean = path.endsWith('/') && path.length > 1 ? path.slice(0, -1) : path;
-  if (!VALID_PATHS.has(clean) && !VALID_PATHS.has(path)) {
-    if (document.getElementById('watch-view').style.display !== 'block') show404(path);
-  } else {
-    if (document.getElementById('watch-view').style.display !== 'block') {
-      document.getElementById('home-view').style.display = 'block';
-      document.getElementById('notfound-view').style.display = 'none';
-    }
-  }
-}
-window.addEventListener('popstate', handleRoute);
-window.addEventListener('load', () => setTimeout(handleRoute, 100));
 
 // ── Auth ──────────────────────────────────────────────────────────
 function openAuthModal(tab='login') {
@@ -1990,13 +2103,19 @@ async function doRegister() {
 
 window.updateAuthUI = function(user) {
   const nr = document.getElementById('navRight');
+  // Always keep the live counter, rebuild the rest
+  const counter = `<div class="live-counter" title="People watching right now">
+    <span class="live-dot"></span>
+    <span id="liveViewerCount">—</span>
+    <span class="live-label" style="color:var(--muted);font-weight:500"> watching</span>
+  </div>`;
   if (user) {
     const initials = user.displayName ? user.displayName[0].toUpperCase() : user.email[0].toUpperCase();
-    nr.innerHTML = `
+    nr.innerHTML = counter + `
       <button class="avatar-btn" title="${escHtml(user.displayName||user.email)}">${escHtml(initials)}</button>
       <button class="nav-btn" onclick="doSignOut()">Sign Out</button>`;
   } else {
-    nr.innerHTML = `
+    nr.innerHTML = counter + `
       <button class="nav-btn" onclick="openAuthModal('login')">Log In</button>
       <button class="nav-btn primary" onclick="openAuthModal('register')">Sign Up</button>`;
   }
@@ -2086,11 +2205,17 @@ function timeAgo(d) {
 // ── Init ──────────────────────────────────────────────────────────
 (async () => {
   renderHistory();
+
+  // Load home data
   await Promise.all([
     fetchTrending().then(d=>setHero(d.Page.media)),
     loadHome(false),
     loadSidebar()
   ]);
+
+  // After content is loaded, handle the initial hash
+  // This restores state on refresh or handles shared links
+  await handleHashChange();
 })();
 </script>
 </body>
