@@ -951,7 +951,6 @@ nav {
             <span class="srv-dot"></span> Server 3
           </button>
         </div>
-        <!-- AniStream status indicator (shown only when Server 3 is active) -->
         <div class="anistream-status" id="anistreamStatus">
           <div class="as-spinner"></div>
           <span id="anistreamStatusText">Connecting...</span>
@@ -1030,7 +1029,6 @@ nav {
 <div class="modal-overlay" id="authModal">
   <div class="modal">
     <button class="modal-close" onclick="closeAuthModal()">✕</button>
-
     <div class="modal-logo">
       <img class="modal-logo-img"
         src="icons/AniBlossom_text.svg"
@@ -1038,13 +1036,11 @@ nav {
         onerror="this.classList.add('errored');this.nextElementSibling.style.display='block'">
       <span class="modal-logo-fallback">AniBlossom</span>
     </div>
-
     <div class="modal-tabs">
       <button class="modal-tab active" id="mtab-login" onclick="switchAuthTab('login')">Log In</button>
       <button class="modal-tab" id="mtab-register" onclick="switchAuthTab('register')">Sign Up</button>
     </div>
     <div class="modal-error" id="authError"></div>
-
     <button class="btn-google" onclick="doGoogleSignIn()">
       <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -1054,9 +1050,7 @@ nav {
       </svg>
       Continue with Google
     </button>
-
     <div class="modal-divider">or</div>
-
     <div id="loginForm">
       <div class="form-group"><label>Email</label><input type="email" id="loginEmail" placeholder="you@example.com"></div>
       <div class="form-group"><label>Password</label><input type="password" id="loginPass" placeholder="••••••••"></div>
@@ -1068,7 +1062,6 @@ nav {
       <div class="form-group"><label>Password</label><input type="password" id="regPass" placeholder="••••••••"></div>
       <button class="modal-submit" onclick="doRegister()">Create Account</button>
     </div>
-
     <div class="modal-support">
       Need help? Contact us at <a href="mailto:support@aniblossom.me">support@aniblossom.me</a>
     </div>
@@ -1101,8 +1094,7 @@ const PROVIDERS = [
     id: "anistream",
     name: "Server 3",
     supportsAudio: false,
-    // URL is built dynamically by the AniStream logic — this is a placeholder
-    getUrl: (anilistId, season, episode, audio) => null
+    getUrl: () => null
   }
 ];
 
@@ -1111,26 +1103,19 @@ function getProvider(id) {
 }
 
 // ── ANISTREAM CONFIG ──────────────────────────────────────────────
-// The AniStream backend — can be a Cloudflare Worker proxy or the direct ngrok URL.
-// Users can override this in localStorage (key: 'anistream_worker') just like the
-// original AniStream site does, but for AniBlossom we default to the known endpoint.
 const ANISTREAM_DEFAULT = 'https://apirizz-ten.vercel.app';
 
 function getAnistreamBase() {
   return localStorage.getItem('anistream_worker') || ANISTREAM_DEFAULT;
 }
 
-// Cache for AniStream sessions so we don't re-fetch on server switch
-// Map: animeTitle → { animeSession, episodeMap: { epNumber → epSession } }
+// Cache: animeId → { animeSession, epData }
 const anistreamCache = {};
 
-// Current AniStream state
-let anistreamAnimeSession = null;   // session key for the current anime
-let anistreamEpSessions = {};       // ep number → episode session string
+let anistreamAnimeSession = null;
+let anistreamEpSessions = {};  // ep number → session string
+let anistreamEpData = [];      // full episode array from API
 
-/**
- * Fetch JSON from the AniStream proxy, adding the required ngrok header.
- */
 async function anistreamFetch(path) {
   const url = getAnistreamBase() + path;
   const r = await fetch(url, { headers: { 'ngrok-skip-browser-warning': '1' } });
@@ -1139,119 +1124,189 @@ async function anistreamFetch(path) {
 }
 
 /**
- * Given an anime title, search the AniStream backend and return the best
- * matching anime_session string. Throws if nothing is found.
+ * Find AniStream session for an anime using title search.
+ * Tries multiple title variants for best match.
  */
-async function anistreamFindSession(animeTitle) {
-  // Try English title first, fall back to romaji fragments
-  const queries = [animeTitle];
-  // Also try without common subtitle words that might confuse the search
-  const simplified = animeTitle.replace(/\s*[\(:].*$/, '').trim();
-  if (simplified !== animeTitle) queries.push(simplified);
+async function anistreamFindSession(anime) {
+  const titles = [
+    anime.title.english,
+    anime.title.romaji,
+    // Strip subtitle after colon/parenthesis for cleaner search
+    anime.title.english && anime.title.english.replace(/\s*[\(:].*/,'').trim(),
+    anime.title.romaji && anime.title.romaji.replace(/\s*[\(:].*/,'').trim(),
+  ].filter((t, i, arr) => t && arr.indexOf(t) === i); // unique non-null
 
-  for (const q of queries) {
-    const results = await anistreamFetch('/search?q=' + encodeURIComponent(q));
-    if (results && results.length > 0) {
-      // Pick the result whose title most closely matches
+  for (const q of titles) {
+    try {
+      const results = await anistreamFetch('/search?q=' + encodeURIComponent(q));
+      if (!results || !results.length) continue;
       const lower = q.toLowerCase();
-      const best = results.find(r => (r.title||'').toLowerCase().includes(lower.split(' ')[0]))
+      // Exact match first, then starts-with, then first result
+      const best = results.find(r => (r.title||'').toLowerCase() === lower)
+                || results.find(r => (r.title||'').toLowerCase().startsWith(lower.split(' ')[0]))
                 || results[0];
       return best.session;
-    }
+    } catch(_) { continue; }
   }
-  throw new Error('No results found on AniStream for "' + animeTitle + '"');
+  throw new Error('Not found on Server 3 for "' + (anime.title.english || anime.title.romaji) + '"');
 }
 
 /**
- * Given an anime_session, fetch all episodes and return a map of
- * episode number → episode session string.
+ * Fetch all episodes; returns array of { number, session, title, snapshot }
  */
 async function anistreamFetchEpisodes(animeSession) {
   const eps = await anistreamFetch('/episodes?session=' + encodeURIComponent(animeSession));
-  const map = {};
-  eps.forEach((ep, i) => {
-    const num = ep.number || (i + 1);
-    map[num] = ep.session;
-  });
-  return map;
+  return eps.map((ep, i) => ({
+    number:   ep.number   || (i + 1),
+    session:  ep.session,
+    title:    ep.title    || `Episode ${ep.number || i + 1}`,
+    snapshot: ep.snapshot || null,
+  }));
 }
 
-/**
- * Build the embed URL for a specific episode using the AniStream backend.
- * Returns null if the session data isn't available yet.
- */
 function anistreamEmbedUrl(animeSession, epSession, title) {
   const base = getAnistreamBase();
   return `${base}/embed?anime_session=${encodeURIComponent(animeSession)}&episode_session=${encodeURIComponent(epSession)}&title=${encodeURIComponent(title || '')}`;
 }
 
 /**
- * High-level: ensure AniStream sessions are loaded for the current anime,
- * then load the player for the given episode number.
- * Shows status in the UI throughout.
+ * Main entry: load AniStream player + update episode sidebar with real data.
  */
 async function loadAnistreamPlayer(anime, epNumber) {
   const title = anime.title.english || anime.title.romaji;
-  const cacheKey = anime.id + '_' + title;
+  const cacheKey = String(anime.id);
 
   setAnistreamStatus('loading', 'Connecting to Server 3...');
 
   try {
-    // Check if we have a cached session for this anime
     if (!anistreamCache[cacheKey]) {
       setAnistreamStatus('loading', 'Searching for anime...');
-      const animeSession = await anistreamFindSession(title);
+      const animeSession = await anistreamFindSession(anime);
 
-      setAnistreamStatus('loading', 'Loading episode list...');
-      const epMap = await anistreamFetchEpisodes(animeSession);
+      setAnistreamStatus('loading', 'Loading episodes...');
+      const epData = await anistreamFetchEpisodes(animeSession);
 
-      anistreamCache[cacheKey] = { animeSession, episodeMap: epMap };
+      anistreamCache[cacheKey] = { animeSession, epData };
     }
 
     const cached = anistreamCache[cacheKey];
     anistreamAnimeSession = cached.animeSession;
-    anistreamEpSessions = cached.episodeMap;
+    anistreamEpData = cached.epData;
 
-    const epSession = anistreamEpSessions[epNumber];
-    if (!epSession) {
-      throw new Error(`Episode ${epNumber} not found on Server 3`);
-    }
+    // Build number → session map
+    anistreamEpSessions = {};
+    anistreamEpData.forEach(ep => { anistreamEpSessions[ep.number] = ep.session; });
 
-    const epLabel = `${title} — Episode ${epNumber}`;
-    const embedUrl = anistreamEmbedUrl(anistreamAnimeSession, epSession, epLabel);
-    document.getElementById('playerIframe').src = embedUrl;
-    setAnistreamStatus('ok', 'Server 3 connected');
+    // Replace episode sidebar with real API data (real count + thumbnails + titles)
+    renderAnistreamEpSidebar(anistreamEpData, epNumber);
 
-    // Prefetch the next episode session in the background
-    const nextEpSession = anistreamEpSessions[epNumber + 1];
-    if (nextEpSession) {
-      const prefetchUrl = getAnistreamBase()
-        + '/prefetch?anime_session=' + encodeURIComponent(anistreamAnimeSession)
-        + '&episode_session=' + encodeURIComponent(nextEpSession);
-      fetch(prefetchUrl, { headers: { 'ngrok-skip-browser-warning': '1' } }).catch(() => {});
+    // Find the episode object
+    const epObj = anistreamEpData.find(e => e.number === epNumber)
+               || anistreamEpData[epNumber - 1]
+               || anistreamEpData[0];
+    if (!epObj) throw new Error(`Episode ${epNumber} not found on Server 3`);
+
+    const epLabel = `${title} — Episode ${epObj.number}`;
+    document.getElementById('playerIframe').src = anistreamEmbedUrl(anistreamAnimeSession, epObj.session, epLabel);
+    setAnistreamStatus('ok', `Server 3 · ${anistreamEpData.length} eps`);
+
+    // Background prefetch of next episode
+    const nextEp = anistreamEpData.find(e => e.number === epNumber + 1);
+    if (nextEp) {
+      fetch(getAnistreamBase() + '/prefetch?anime_session=' + encodeURIComponent(anistreamAnimeSession) + '&episode_session=' + encodeURIComponent(nextEp.session),
+        { headers: { 'ngrok-skip-browser-warning': '1' } }).catch(() => {});
     }
 
   } catch (err) {
     setAnistreamStatus('error', 'Server 3 unavailable');
     showToast('Server 3: ' + err.message, 'error');
-    // Clear the iframe so there's no stale content
     document.getElementById('playerIframe').src = '';
   }
 }
 
-/** Update the small status badge shown beside the Server 3 button. */
+/**
+ * Render episode sidebar using real episode data from AniStream.
+ * Replaces the AniList-based sidebar with actual episode count + thumbnails.
+ */
+function renderAnistreamEpSidebar(epData, activeEp) {
+  totalEps = epData.length;
+  allEpItems = epData.map(e => e.number);
+
+  // Rebuild page buttons with real episode numbers
+  const pages = Math.ceil(epData.length / epPageSize);
+  const btns = document.getElementById('epPageBtns');
+  if (pages <= 1) {
+    btns.innerHTML = '';
+  } else {
+    btns.innerHTML = Array.from({length: pages}, (_, i) => {
+      const s = epData[i * epPageSize]?.number ?? (i * epPageSize + 1);
+      const e = epData[Math.min((i + 1) * epPageSize - 1, epData.length - 1)]?.number ?? (i + 1) * epPageSize;
+      return `<button class="ep-page-btn ${i === 0 ? 'active' : ''}" onclick="switchAnistreamEpPage(${i}, this)">${s}–${e}</button>`;
+    }).join('');
+  }
+
+  epPageCurrent = 0;
+  renderAnistreamEpSlice(epData.slice(0, epPageSize), activeEp);
+}
+
+function renderAnistreamEpSlice(slice, activeEp) {
+  const scroll = document.getElementById('epScroll');
+  scroll.innerHTML = slice.map(ep => {
+    const hasThumb = !!ep.snapshot;
+    return `<div class="ep-item ${ep.number === activeEp ? 'active' : ''}" id="ep-item-${ep.number}" onclick="selectEpAnistream(${ep.number})">
+      <div class="ep-thumb" style="${hasThumb ? `background-image:url('${escHtml(ep.snapshot)}');background-size:cover;background-position:center` : ''}">
+        <span class="ep-thumb-num">EP ${ep.number}</span>
+      </div>
+      <div class="ep-item-info">
+        <div class="ep-item-title">${escHtml(ep.title || 'Episode ' + ep.number)}</div>
+        <div class="ep-item-date">${currentAnime?.startDate?.year || ''}</div>
+      </div>
+    </div>`;
+  }).join('');
+  setTimeout(() => {
+    const active = document.getElementById('ep-item-' + activeEp);
+    if (active) active.scrollIntoView({ block: 'nearest' });
+  }, 50);
+}
+
+function switchAnistreamEpPage(i, btn) {
+  epPageCurrent = i;
+  document.querySelectorAll('.ep-page-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderAnistreamEpSlice(anistreamEpData.slice(i * epPageSize, (i + 1) * epPageSize), currentEp);
+}
+
+function selectEpAnistream(epNumber) {
+  currentEp = epNumber;
+  const title = currentAnime ? (currentAnime.title.english || currentAnime.title.romaji) : '';
+  const epObj = anistreamEpData.find(e => e.number === epNumber);
+  if (!epObj) { showToast('Episode not available on Server 3', 'error'); return; }
+
+  const epLabel = `${title} — Episode ${epNumber}`;
+  document.getElementById('playerIframe').src = anistreamEmbedUrl(anistreamAnimeSession, epObj.session, epLabel);
+
+  document.querySelectorAll('.ep-item').forEach(el => el.classList.remove('active'));
+  const el = document.getElementById('ep-item-' + epNumber);
+  if (el) { el.classList.add('active'); el.scrollIntoView({ block: 'nearest' }); }
+
+  document.getElementById('epTitle').textContent = `${epNumber}. ${escHtml(epObj.title || 'Episode ' + epNumber)}`;
+  addHistory(currentAnime, epNumber);
+  renderComments(currentAnime.id, epNumber);
+
+  // Prefetch next
+  const nextEp = anistreamEpData.find(e => e.number === epNumber + 1);
+  if (nextEp && anistreamAnimeSession) {
+    fetch(getAnistreamBase() + '/prefetch?anime_session=' + encodeURIComponent(anistreamAnimeSession) + '&episode_session=' + encodeURIComponent(nextEp.session),
+      { headers: { 'ngrok-skip-browser-warning': '1' } }).catch(() => {});
+  }
+}
+
 function setAnistreamStatus(state, text) {
   const el = document.getElementById('anistreamStatus');
   const textEl = document.getElementById('anistreamStatusText');
   el.className = 'anistream-status show ' + state;
   textEl.textContent = text;
-  // Swap spinner with a dot when done
-  const spinner = el.querySelector('.as-spinner');
-  if (state === 'loading') {
-    spinner.style.display = 'block';
-  } else {
-    spinner.style.display = 'none';
-  }
+  el.querySelector('.as-spinner').style.display = state === 'loading' ? 'block' : 'none';
 }
 
 function hideAnistreamStatus() {
@@ -1266,9 +1321,7 @@ const FIELDS = `id title{romaji english native} coverImage{large extraLarge} ban
 const CACHE_TTL = 60 * 60 * 1000;
 
 function cacheSet(key, data) {
-  try {
-    localStorage.setItem('ab_cache_' + key, JSON.stringify({ ts: Date.now(), data }));
-  } catch(e) {}
+  try { localStorage.setItem('ab_cache_' + key, JSON.stringify({ ts: Date.now(), data })); } catch(e) {}
 }
 function cacheGet(key) {
   try {
@@ -1322,10 +1375,7 @@ async function fetchEpisodeMeta(animeId) {
   const cached = cacheGet(key);
   if (cached) return cached;
   try {
-    const data = await gql(
-      `query($id:Int){Media(id:$id){streamingEpisodes{title thumbnail site}}}`,
-      {id: animeId}
-    );
+    const data = await gql(`query($id:Int){Media(id:$id){streamingEpisodes{title thumbnail site}}}`, {id: animeId});
     const eps = (data?.Media?.streamingEpisodes || []).slice().reverse();
     cacheSet(key, eps);
     return eps;
@@ -1383,8 +1433,7 @@ function openFromHistory(i) {
 // ── Hero ──────────────────────────────────────────────────────────
 function setHero(list) {
   heroList = list; currentHeroIdx = 0;
-  renderHero();
-  renderHeroNav();
+  renderHero(); renderHeroNav();
   clearInterval(heroTimer);
   heroTimer = setInterval(() => { currentHeroIdx = (currentHeroIdx+1)%heroList.length; renderHero(); updateHeroDots(); }, 6000);
 }
@@ -1478,7 +1527,6 @@ function filterGenre(genre, btn) {
 async function loadHome(withHero=false) {
   const grid = document.getElementById('animeGrid');
   grid.innerHTML = Array(10).fill('<div class="ac"><div class="ac-img-w skeleton" style="aspect-ratio:2/3"></div><div class="ac-info"><div class="skeleton" style="height:14px;margin-bottom:4px"></div><div class="skeleton" style="height:10px;width:60%"></div></div></div>').join('');
-
   const [listData] = await Promise.all([
     fetchList(currentTab, currentPage, currentGenre),
     withHero ? fetchTrending().then(d=>setHero(d.Page.media)) : Promise.resolve()
@@ -1513,7 +1561,7 @@ function openWatch(anime, ep=1) {
   currentSeason = 1;
   totalEps = anime.episodes || 24;
 
-  // Reset to Server 1 defaults
+  // Reset server state
   currentServer = 'filmu';
   currentDub = 'sub';
   ['srv-filmu','srv-animplay','srv-anistream'].forEach(id => {
@@ -1525,9 +1573,10 @@ function openWatch(anime, ep=1) {
   document.getElementById('dubToggle').style.display = 'none';
   hideAnistreamStatus();
 
-  // Reset AniStream session state when switching anime
+  // Clear AniStream state when switching anime
   anistreamAnimeSession = null;
   anistreamEpSessions = {};
+  anistreamEpData = [];
 
   showWatch();
   loadPlayer(currentSeason, ep);
@@ -1539,45 +1588,36 @@ function openWatch(anime, ep=1) {
 }
 
 function buildEmbedUrl(server, anilistId, season, ep, dub) {
-  const provider = getProvider(server);
-  return provider.getUrl(anilistId, season, ep, dub);
+  return getProvider(server).getUrl(anilistId, season, ep, dub);
 }
 
 function loadPlayer(season, ep) {
   if (currentServer === 'anistream') {
-    // AniStream has its own async loading flow
-    if (currentAnime) {
-      loadAnistreamPlayer(currentAnime, ep);
-    }
+    if (currentAnime) loadAnistreamPlayer(currentAnime, ep);
     return;
   }
-
   const url = buildEmbedUrl(currentServer, currentAnime.id, season, ep, currentDub);
   document.getElementById('playerIframe').src = url;
-  const provider = getProvider(currentServer);
-  document.getElementById('dubToggle').style.display = provider.supportsAudio ? 'flex' : 'none';
+  document.getElementById('dubToggle').style.display = getProvider(currentServer).supportsAudio ? 'flex' : 'none';
 }
 
 function switchServer(server) {
   currentServer = server;
-
-  // Update active button state for all three servers
   ['srv-filmu', 'srv-animplay', 'srv-anistream'].forEach(id => {
     document.getElementById(id)?.classList.remove('active');
   });
   document.getElementById('srv-' + server)?.classList.add('active');
 
   if (server === 'anistream') {
-    // Hide dub toggle (AniStream doesn't natively support dub switching via the embed)
     document.getElementById('dubToggle').style.display = 'none';
-    // Load AniStream player
     if (currentAnime) loadAnistreamPlayer(currentAnime, currentEp);
-    showToast('Switched to Server 3 (AniStream)', 'success');
+    showToast('Switched to Server 3', 'success');
   } else {
     hideAnistreamStatus();
+    // Restore AniList-based episode sidebar when leaving Server 3
+    if (anistreamEpData.length) buildEpSidebar(currentAnime);
     loadPlayer(currentSeason, currentEp);
-    const provider = getProvider(server);
-    showToast(`Switched to ${provider.name}`, 'success');
+    showToast(`Switched to ${getProvider(server).name}`, 'success');
   }
 }
 
@@ -1594,7 +1634,6 @@ function renderWatchInfo(anime, ep) {
   document.getElementById('epTitle').textContent = `${ep}. ${title}`;
   document.getElementById('epDate').textContent = anime.startDate?.year ? `${anime.startDate.year}` : '';
   document.getElementById('epDesc').textContent = stripHtml(anime.description||'').slice(0,300)+'...';
-
   const studio = anime.studios?.nodes?.[0]?.name || '';
   document.getElementById('animeDetail').innerHTML = `
     <div class="detail-poster">
@@ -1620,7 +1659,7 @@ function renderWatchInfo(anime, ep) {
     </div>`;
 }
 
-// ── Episode Sidebar ───────────────────────────────────────────────
+// ── Episode Sidebar (AniList-based, used for Server 1 & 2) ────────
 async function buildEpSidebar(anime) {
   totalEps = anime.episodes || 24;
   allEpItems = Array.from({length: totalEps}, (_,i) => i+1);
@@ -1699,6 +1738,16 @@ function selectEp(ep) {
 }
 
 function filterEps(q) {
+  // If on AniStream, filter the real episode data
+  if (currentServer === 'anistream' && anistreamEpData.length) {
+    const lq = q.toLowerCase();
+    const filtered = anistreamEpData.filter(ep =>
+      String(ep.number).includes(q) ||
+      (ep.title || '').toLowerCase().includes(lq)
+    );
+    renderAnistreamEpSlice(filtered, currentEp);
+    return;
+  }
   const lq = q.toLowerCase();
   const filtered = allEpItems.filter(ep => {
     if (String(ep).includes(q)) return true;
@@ -1763,18 +1812,12 @@ function renderComments(animeId, ep) {
     <div class="comments-list" id="commentsList"><div style="color:var(--muted);font-size:0.85rem;padding:0.5rem">Loading comments...</div></div>`;
 
   try {
-    const q = fb.query(
-      fb.collection(fb.db, 'comments'),
-      fb.where('key', '==', commentKey)
-    );
+    const q = fb.query(fb.collection(fb.db, 'comments'), fb.where('key', '==', commentKey));
     commentsUnsub = fb.onSnapshot(q,
       snap => {
         const list = document.getElementById('commentsList');
         if (!list) return;
-        if (snap.empty) {
-          list.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;padding:0.5rem">No comments yet. Be the first!</div>';
-          return;
-        }
+        if (snap.empty) { list.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;padding:0.5rem">No comments yet. Be the first!</div>'; return; }
         const docs = snap.docs.slice().sort((a,b) => {
           const ta = a.data().createdAt?.toMillis?.() || 0;
           const tb = b.data().createdAt?.toMillis?.() || 0;
@@ -1805,13 +1848,9 @@ function renderComments(animeId, ep) {
         const list = document.getElementById('commentsList');
         if (!list) return;
         if (err.code === 'failed-precondition' || err.message?.includes('index')) {
-          list.innerHTML = `<div class="comments-notice">
-            Comments require a Firestore index. Please
-            <a href="https://console.firebase.google.com/project/aniblossom-f0d34/firestore/indexes" target="_blank" rel="noopener">create the index here</a>,
-            then reload.
-          </div>`;
+          list.innerHTML = `<div class="comments-notice">Comments require a Firestore index. Please <a href="https://console.firebase.google.com/project/aniblossom-f0d34/firestore/indexes" target="_blank" rel="noopener">create the index here</a>, then reload.</div>`;
         } else {
-          list.innerHTML = `<div style="color:var(--muted);font-size:0.85rem;padding:0.5rem">Could not load comments. Check Firestore rules.</div>`;
+          list.innerHTML = `<div style="color:var(--muted);font-size:0.85rem;padding:0.5rem">Could not load comments.</div>`;
         }
       }
     );
@@ -1877,9 +1916,7 @@ function handleRoute() {
   const path = window.location.pathname;
   const clean = path.endsWith('/') && path.length > 1 ? path.slice(0, -1) : path;
   if (!VALID_PATHS.has(clean) && !VALID_PATHS.has(path)) {
-    if (document.getElementById('watch-view').style.display !== 'block') {
-      show404(path);
-    }
+    if (document.getElementById('watch-view').style.display !== 'block') show404(path);
   } else {
     if (document.getElementById('watch-view').style.display !== 'block') {
       document.getElementById('home-view').style.display = 'block';
@@ -1887,7 +1924,6 @@ function handleRoute() {
     }
   }
 }
-
 window.addEventListener('popstate', handleRoute);
 window.addEventListener('load', () => setTimeout(handleRoute, 100));
 
