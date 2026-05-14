@@ -1114,7 +1114,7 @@ function getProvider(id) {
 // The AniStream backend — can be a Cloudflare Worker proxy or the direct ngrok URL.
 // Users can override this in localStorage (key: 'anistream_worker') just like the
 // original AniStream site does, but for AniBlossom we default to the known endpoint.
-const ANISTREAM_DEFAULT = 'https://operate-moonrise-riddance.ngrok-free.dev';
+const ANISTREAM_DEFAULT = 'https://apirizz-ten.vercel.app';
 
 function getAnistreamBase() {
   return localStorage.getItem('anistream_worker') || ANISTREAM_DEFAULT;
