@@ -31,7 +31,6 @@
   const googleProvider = new GoogleAuthProvider();
   window.__fb = { auth, db, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup, googleProvider, doc, getDoc, addDoc, collection, query, where, orderBy, onSnapshot, serverTimestamp, getDocs };
 
-  // FIX: read maintenanceMode (boolean) field
   const settingsRef = doc(db, 'admin', 'settings');
   onSnapshot(settingsRef, (snap) => {
     const inMaintenance = snap.exists() && snap.data().maintenanceMode === true;
@@ -685,6 +684,24 @@ nav {
 .dub-btn { background: none; border: none; padding: 0.35rem 0.8rem; font-family: var(--font-body); font-size: 0.78rem; font-weight: 800; letter-spacing: 0.5px; color: var(--muted); cursor: pointer; transition: all 0.15s; }
 .dub-btn.active { background: var(--accent); color: #fff; }
 
+/* ── ANISTREAM STATUS ─────────────────────────────────────────────── */
+.anistream-status {
+  display: none;
+  align-items: center; gap: 0.5rem;
+  font-size: 0.75rem; color: var(--muted);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; padding: 0.3rem 0.75rem;
+}
+.anistream-status.show { display: flex; }
+.anistream-status .as-spinner {
+  width: 10px; height: 10px;
+  border: 2px solid var(--border); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.anistream-status.error { color: #f87171; border-color: rgba(248,113,113,0.3); background: rgba(248,113,113,0.06); }
+.anistream-status.ok { color: #4ade80; border-color: rgba(74,222,128,0.3); background: rgba(74,222,128,0.06); }
+
 /* ── 404 VIEW ────────────────────────────────────────────────────── */
 #notfound-view { display: none; }
 .nf-wrap {
@@ -929,6 +946,15 @@ nav {
           <button class="server-btn" id="srv-animplay" onclick="switchServer('animplay')">
             <span class="srv-dot"></span> Server 2
           </button>
+          <div class="server-divider"></div>
+          <button class="server-btn" id="srv-anistream" onclick="switchServer('anistream')">
+            <span class="srv-dot"></span> Server 3
+          </button>
+        </div>
+        <!-- AniStream status indicator (shown only when Server 3 is active) -->
+        <div class="anistream-status" id="anistreamStatus">
+          <div class="as-spinner"></div>
+          <span id="anistreamStatusText">Connecting...</span>
         </div>
         <div class="dub-toggle" id="dubToggle">
           <button class="dub-btn active" id="dub-sub" onclick="switchDub('sub')">SUB</button>
@@ -1070,11 +1096,166 @@ const PROVIDERS = [
     getUrl: (anilistId, season, episode, audio = "sub") => {
       return `https://animeplay.cfd/stream/ani/${anilistId}/${episode}/${audio}`;
     }
+  },
+  {
+    id: "anistream",
+    name: "Server 3",
+    supportsAudio: false,
+    // URL is built dynamically by the AniStream logic — this is a placeholder
+    getUrl: (anilistId, season, episode, audio) => null
   }
 ];
 
 function getProvider(id) {
   return PROVIDERS.find(p => p.id === id) || PROVIDERS[0];
+}
+
+// ── ANISTREAM CONFIG ──────────────────────────────────────────────
+// The AniStream backend — can be a Cloudflare Worker proxy or the direct ngrok URL.
+// Users can override this in localStorage (key: 'anistream_worker') just like the
+// original AniStream site does, but for AniBlossom we default to the known endpoint.
+const ANISTREAM_DEFAULT = 'https://operate-moonrise-riddance.ngrok-free.dev';
+
+function getAnistreamBase() {
+  return localStorage.getItem('anistream_worker') || ANISTREAM_DEFAULT;
+}
+
+// Cache for AniStream sessions so we don't re-fetch on server switch
+// Map: animeTitle → { animeSession, episodeMap: { epNumber → epSession } }
+const anistreamCache = {};
+
+// Current AniStream state
+let anistreamAnimeSession = null;   // session key for the current anime
+let anistreamEpSessions = {};       // ep number → episode session string
+
+/**
+ * Fetch JSON from the AniStream proxy, adding the required ngrok header.
+ */
+async function anistreamFetch(path) {
+  const url = getAnistreamBase() + path;
+  const r = await fetch(url, { headers: { 'ngrok-skip-browser-warning': '1' } });
+  if (!r.ok) throw new Error(`AniStream HTTP ${r.status}`);
+  return r.json();
+}
+
+/**
+ * Given an anime title, search the AniStream backend and return the best
+ * matching anime_session string. Throws if nothing is found.
+ */
+async function anistreamFindSession(animeTitle) {
+  // Try English title first, fall back to romaji fragments
+  const queries = [animeTitle];
+  // Also try without common subtitle words that might confuse the search
+  const simplified = animeTitle.replace(/\s*[\(:].*$/, '').trim();
+  if (simplified !== animeTitle) queries.push(simplified);
+
+  for (const q of queries) {
+    const results = await anistreamFetch('/search?q=' + encodeURIComponent(q));
+    if (results && results.length > 0) {
+      // Pick the result whose title most closely matches
+      const lower = q.toLowerCase();
+      const best = results.find(r => (r.title||'').toLowerCase().includes(lower.split(' ')[0]))
+                || results[0];
+      return best.session;
+    }
+  }
+  throw new Error('No results found on AniStream for "' + animeTitle + '"');
+}
+
+/**
+ * Given an anime_session, fetch all episodes and return a map of
+ * episode number → episode session string.
+ */
+async function anistreamFetchEpisodes(animeSession) {
+  const eps = await anistreamFetch('/episodes?session=' + encodeURIComponent(animeSession));
+  const map = {};
+  eps.forEach((ep, i) => {
+    const num = ep.number || (i + 1);
+    map[num] = ep.session;
+  });
+  return map;
+}
+
+/**
+ * Build the embed URL for a specific episode using the AniStream backend.
+ * Returns null if the session data isn't available yet.
+ */
+function anistreamEmbedUrl(animeSession, epSession, title) {
+  const base = getAnistreamBase();
+  return `${base}/embed?anime_session=${encodeURIComponent(animeSession)}&episode_session=${encodeURIComponent(epSession)}&title=${encodeURIComponent(title || '')}`;
+}
+
+/**
+ * High-level: ensure AniStream sessions are loaded for the current anime,
+ * then load the player for the given episode number.
+ * Shows status in the UI throughout.
+ */
+async function loadAnistreamPlayer(anime, epNumber) {
+  const title = anime.title.english || anime.title.romaji;
+  const cacheKey = anime.id + '_' + title;
+
+  setAnistreamStatus('loading', 'Connecting to Server 3...');
+
+  try {
+    // Check if we have a cached session for this anime
+    if (!anistreamCache[cacheKey]) {
+      setAnistreamStatus('loading', 'Searching for anime...');
+      const animeSession = await anistreamFindSession(title);
+
+      setAnistreamStatus('loading', 'Loading episode list...');
+      const epMap = await anistreamFetchEpisodes(animeSession);
+
+      anistreamCache[cacheKey] = { animeSession, episodeMap: epMap };
+    }
+
+    const cached = anistreamCache[cacheKey];
+    anistreamAnimeSession = cached.animeSession;
+    anistreamEpSessions = cached.episodeMap;
+
+    const epSession = anistreamEpSessions[epNumber];
+    if (!epSession) {
+      throw new Error(`Episode ${epNumber} not found on Server 3`);
+    }
+
+    const epLabel = `${title} — Episode ${epNumber}`;
+    const embedUrl = anistreamEmbedUrl(anistreamAnimeSession, epSession, epLabel);
+    document.getElementById('playerIframe').src = embedUrl;
+    setAnistreamStatus('ok', 'Server 3 connected');
+
+    // Prefetch the next episode session in the background
+    const nextEpSession = anistreamEpSessions[epNumber + 1];
+    if (nextEpSession) {
+      const prefetchUrl = getAnistreamBase()
+        + '/prefetch?anime_session=' + encodeURIComponent(anistreamAnimeSession)
+        + '&episode_session=' + encodeURIComponent(nextEpSession);
+      fetch(prefetchUrl, { headers: { 'ngrok-skip-browser-warning': '1' } }).catch(() => {});
+    }
+
+  } catch (err) {
+    setAnistreamStatus('error', 'Server 3 unavailable');
+    showToast('Server 3: ' + err.message, 'error');
+    // Clear the iframe so there's no stale content
+    document.getElementById('playerIframe').src = '';
+  }
+}
+
+/** Update the small status badge shown beside the Server 3 button. */
+function setAnistreamStatus(state, text) {
+  const el = document.getElementById('anistreamStatus');
+  const textEl = document.getElementById('anistreamStatusText');
+  el.className = 'anistream-status show ' + state;
+  textEl.textContent = text;
+  // Swap spinner with a dot when done
+  const spinner = el.querySelector('.as-spinner');
+  if (state === 'loading') {
+    spinner.style.display = 'block';
+  } else {
+    spinner.style.display = 'none';
+  }
+}
+
+function hideAnistreamStatus() {
+  document.getElementById('anistreamStatus').className = 'anistream-status';
 }
 
 // ── AniList ───────────────────────────────────────────────────────
@@ -1097,12 +1278,6 @@ function cacheGet(key) {
     if (Date.now() - ts > CACHE_TTL) { localStorage.removeItem('ab_cache_' + key); return null; }
     return data;
   } catch(e) { return null; }
-}
-function cacheClear() {
-  const keys = Object.keys(localStorage).filter(k => k.startsWith('ab_cache_'));
-  keys.forEach(k => localStorage.removeItem(k));
-  showToast('Cache cleared — fetching fresh data', 'success');
-  location.reload();
 }
 
 async function gql(query, vars={}) {
@@ -1142,7 +1317,6 @@ async function fetchRelated(id) {
   return cachedGql(key, `query($id:Int){Media(id:$id){recommendations(perPage:6){nodes{mediaRecommendation{id title{romaji english} coverImage{large} episodes averageScore status format}}}}}`,{id});
 }
 
-// FIX: reverse streamingEpisodes so EP 1 = oldest, not newest
 async function fetchEpisodeMeta(animeId) {
   const key = `epmeta_${animeId}`;
   const cached = cacheGet(key);
@@ -1152,7 +1326,6 @@ async function fetchEpisodeMeta(animeId) {
       `query($id:Int){Media(id:$id){streamingEpisodes{title thumbnail site}}}`,
       {id: animeId}
     );
-    // AniList returns newest-first — reverse so index 0 = Episode 1
     const eps = (data?.Media?.streamingEpisodes || []).slice().reverse();
     cacheSet(key, eps);
     return eps;
@@ -1340,13 +1513,21 @@ function openWatch(anime, ep=1) {
   currentSeason = 1;
   totalEps = anime.episodes || 24;
 
+  // Reset to Server 1 defaults
   currentServer = 'filmu';
   currentDub = 'sub';
+  ['srv-filmu','srv-animplay','srv-anistream'].forEach(id => {
+    document.getElementById(id)?.classList.remove('active');
+  });
   document.getElementById('srv-filmu').classList.add('active');
-  document.getElementById('srv-animplay').classList.remove('active');
   document.getElementById('dub-sub').classList.add('active');
   document.getElementById('dub-dub').classList.remove('active');
   document.getElementById('dubToggle').style.display = 'none';
+  hideAnistreamStatus();
+
+  // Reset AniStream session state when switching anime
+  anistreamAnimeSession = null;
+  anistreamEpSessions = {};
 
   showWatch();
   loadPlayer(currentSeason, ep);
@@ -1363,6 +1544,14 @@ function buildEmbedUrl(server, anilistId, season, ep, dub) {
 }
 
 function loadPlayer(season, ep) {
+  if (currentServer === 'anistream') {
+    // AniStream has its own async loading flow
+    if (currentAnime) {
+      loadAnistreamPlayer(currentAnime, ep);
+    }
+    return;
+  }
+
   const url = buildEmbedUrl(currentServer, currentAnime.id, season, ep, currentDub);
   document.getElementById('playerIframe').src = url;
   const provider = getProvider(currentServer);
@@ -1371,11 +1560,25 @@ function loadPlayer(season, ep) {
 
 function switchServer(server) {
   currentServer = server;
-  document.getElementById('srv-animplay').classList.toggle('active', server === 'animplay');
-  document.getElementById('srv-filmu').classList.toggle('active', server === 'filmu');
-  loadPlayer(currentSeason, currentEp);
-  const provider = getProvider(server);
-  showToast(`Switched to ${provider.name}`, 'success');
+
+  // Update active button state for all three servers
+  ['srv-filmu', 'srv-animplay', 'srv-anistream'].forEach(id => {
+    document.getElementById(id)?.classList.remove('active');
+  });
+  document.getElementById('srv-' + server)?.classList.add('active');
+
+  if (server === 'anistream') {
+    // Hide dub toggle (AniStream doesn't natively support dub switching via the embed)
+    document.getElementById('dubToggle').style.display = 'none';
+    // Load AniStream player
+    if (currentAnime) loadAnistreamPlayer(currentAnime, currentEp);
+    showToast('Switched to Server 3 (AniStream)', 'success');
+  } else {
+    hideAnistreamStatus();
+    loadPlayer(currentSeason, currentEp);
+    const provider = getProvider(server);
+    showToast(`Switched to ${provider.name}`, 'success');
+  }
 }
 
 function switchDub(type) {
@@ -1648,6 +1851,7 @@ function showHome() {
   document.getElementById('notfound-view').style.display = 'none';
   document.getElementById('playerIframe').src = '';
   if (commentsUnsub) { commentsUnsub(); commentsUnsub = null; }
+  hideAnistreamStatus();
   renderHistory();
   history.pushState(null, '', '/');
 }
@@ -1666,28 +1870,13 @@ function show404(path) {
   window.scrollTo(0,0);
 }
 
-// ── Routing — custom domain safe ──────────────────────────────────
-// On a custom domain (aniblossom.me) every URL path that isn't "/"
-// is a real 404. Since this is a single-page app served from one
-// file, we only show the 404 screen for paths we genuinely don't
-// handle, and never for "/" or "/index.html".
-// We do NOT check the path on first load because the server should
-// already be redirecting unknown paths to index.html (via a 404.html
-// redirect or Netlify/Vercel/Cloudflare _redirects rule). If the
-// server sends the user to index.html for any path, we just show
-// the home page — the 404 view is only triggered when JS navigation
-// within the app hits an unknown route (which currently never
-// happens since all navigation is state-based, not URL-based).
-
+// ── Routing ───────────────────────────────────────────────────────
 const VALID_PATHS = new Set(['/', '/index.html', '']);
 
 function handleRoute() {
   const path = window.location.pathname;
-  // Normalise trailing slash
   const clean = path.endsWith('/') && path.length > 1 ? path.slice(0, -1) : path;
-
   if (!VALID_PATHS.has(clean) && !VALID_PATHS.has(path)) {
-    // Only show 404 if we're NOT already watching something
     if (document.getElementById('watch-view').style.display !== 'block') {
       show404(path);
     }
@@ -1700,8 +1889,6 @@ function handleRoute() {
 }
 
 window.addEventListener('popstate', handleRoute);
-// Delay so Firebase/app init fires first, and also so the
-// maintenance overlay has a chance to resolve before we touch views.
 window.addEventListener('load', () => setTimeout(handleRoute, 100));
 
 // ── Auth ──────────────────────────────────────────────────────────
