@@ -13,7 +13,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
   import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-  import { getFirestore, doc, getDoc, addDoc, collection, query, where, orderBy, onSnapshot, serverTimestamp, getDocs } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+  import { getFirestore, doc, getDoc, setDoc, addDoc, collection, query, where, orderBy, onSnapshot, serverTimestamp, getDocs, updateDoc, increment } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
   import { getDatabase, ref, onValue, onDisconnect, set, remove, push } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-database.js";
 
   const firebaseConfig = {
@@ -33,15 +33,17 @@
   const rtdb = getDatabase(app);
   const googleProvider = new GoogleAuthProvider();
 
-  window.__fb = { auth, db, rtdb, ref, onValue, onDisconnect, set, remove, push, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup, googleProvider, doc, getDoc, addDoc, collection, query, where, orderBy, onSnapshot, serverTimestamp, getDocs };
+  window.__fb = { auth, db, rtdb, ref, onValue, onDisconnect, set, remove, push, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup, googleProvider, doc, getDoc, setDoc, addDoc, collection, query, where, orderBy, onSnapshot, serverTimestamp, getDocs, updateDoc, increment };
 
-  // ── MAINTENANCE CHECK ─────────────────────────────────────────
-  const settingsRef = doc(db, 'admin', 'settings');
-  onSnapshot(settingsRef, (snap) => {
-    const inMaintenance = snap.exists() && snap.data().maintenanceMode === true;
+  // ── MAINTENANCE MODE (live Firestore listener on 'matience mode' collection) ──
+  // Collection: "matience mode", document: "matienceonoroff" (field: matienceonoroff: true/false)
+  const maintDoc = doc(db, 'matience mode', 'matienceonoroff');
+  onSnapshot(maintDoc, (snap) => {
+    const inMaintenance = snap.exists() && snap.data().matienceonoroff === true;
     document.getElementById('maintenance-overlay').style.display = inMaintenance ? 'flex' : 'none';
     document.getElementById('app').style.display = inMaintenance ? 'none' : 'block';
   }, () => {
+    // On error (no access, etc), just show app normally
     document.getElementById('app').style.display = 'block';
   });
 
@@ -49,33 +51,28 @@
   onAuthStateChanged(auth, user => {
     window.__currentUser = user;
     window.updateAuthUI && window.updateAuthUI(user);
+    if (user) {
+      window.ensureUserProfile && window.ensureUserProfile(user);
+    }
   });
 
   // ── LIVE VIEWER PRESENCE ──────────────────────────────────────
-  // Uses Firebase RTDB .info/connected for real-time presence
   const connectedRef = ref(rtdb, '.info/connected');
   const visitorsRef = ref(rtdb, 'visitors');
 
   onValue(connectedRef, (snap) => {
     if (snap.val() === true) {
-      // Create a unique slot for this visitor
       const myRef = push(visitorsRef);
-      // Remove our slot when we disconnect
       onDisconnect(myRef).remove();
-      // Mark ourselves as present
       set(myRef, true);
     }
   });
 
-  // Listen to total visitor count in real time
   onValue(visitorsRef, (snap) => {
     const count = snap.exists() ? Object.keys(snap.val()).length : 0;
     const el = document.getElementById('liveViewerCount');
     if (el) {
-      el.textContent = count >= 1000
-        ? (count / 1000).toFixed(1) + 'k'
-        : count;
-      // Pulse animation on change
+      el.textContent = count >= 1000 ? (count / 1000).toFixed(1) + 'k' : count;
       el.closest('.live-counter')?.classList.remove('pulse');
       void el.closest('.live-counter')?.offsetWidth;
       el.closest('.live-counter')?.classList.add('pulse');
@@ -148,6 +145,58 @@ body::before {
   100% { background-position: 200% center; }
 }
 
+/* ── DAILY STATUS BANNER ─────────────────────────────────────────── */
+#daily-status-banner {
+  display: none;
+  position: fixed;
+  bottom: 5rem;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  z-index: 800;
+  background: linear-gradient(135deg, rgba(20,20,28,0.97), rgba(30,20,35,0.97));
+  border: 1px solid rgba(232,109,176,0.35);
+  border-radius: 14px;
+  padding: 1rem 1.5rem;
+  max-width: min(480px, 90vw);
+  width: 100%;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(232,109,176,0.08);
+  backdrop-filter: blur(16px);
+  opacity: 0;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+  pointer-events: none;
+}
+#daily-status-banner.show {
+  display: block;
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+.dsb-inner { display: flex; align-items: flex-start; gap: 0.85rem; }
+.dsb-icon {
+  font-size: 1.4rem; flex-shrink: 0;
+  animation: logoPulse 2s ease-in-out infinite;
+  filter: drop-shadow(0 0 6px rgba(232,109,176,0.5));
+}
+.dsb-content { flex: 1; min-width: 0; }
+.dsb-title {
+  font-size: 0.88rem; font-weight: 800;
+  color: var(--text); margin-bottom: 0.25rem;
+  display: flex; align-items: center; gap: 0.4rem;
+}
+.dsb-title .dsb-live-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+  animation: livePulse 2s ease-in-out infinite; flex-shrink: 0;
+}
+.dsb-text { font-size: 0.8rem; color: var(--muted); line-height: 1.5; }
+.dsb-text a { color: var(--accent); text-decoration: none; font-weight: 600; }
+.dsb-text a:hover { text-decoration: underline; }
+.dsb-close {
+  background: none; border: none; color: var(--muted);
+  cursor: pointer; font-size: 1rem; flex-shrink: 0;
+  padding: 0; transition: color 0.15s; line-height: 1;
+}
+.dsb-close:hover { color: var(--text); }
+
 /* ── LIVE COUNTER ────────────────────────────────────────────────── */
 .live-counter {
   display: flex;
@@ -166,15 +215,10 @@ body::before {
   cursor: default;
   user-select: none;
 }
-.live-counter:hover {
-  border-color: rgba(232,109,176,0.45);
-}
+.live-counter:hover { border-color: rgba(232,109,176,0.45); }
 .live-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  flex-shrink: 0;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent); flex-shrink: 0;
   animation: livePulse 2s ease-in-out infinite;
   box-shadow: 0 0 0 0 rgba(232,109,176,0.6);
 }
@@ -183,34 +227,25 @@ body::before {
   50%  { box-shadow: 0 0 0 4px rgba(232,109,176,0); }
   100% { box-shadow: 0 0 0 0 rgba(232,109,176,0); }
 }
-/* Quick flash on count update */
 @keyframes counterPulse {
   0%   { background: rgba(232,109,176,0.07); }
   40%  { background: rgba(232,109,176,0.18); }
   100% { background: rgba(232,109,176,0.07); }
 }
-.live-counter.pulse {
-  animation: counterPulse 0.5s ease;
-}
+.live-counter.pulse { animation: counterPulse 0.5s ease; }
 
 .logo-text-img {
-  height: 28px;
-  width: auto;
-  object-fit: contain;
-  flex-shrink: 0;
+  height: 28px; width: auto; object-fit: contain; flex-shrink: 0;
   animation: logoEntrance 0.5s cubic-bezier(0.34,1.56,0.64,1) both,
              logoFloat 4s ease-in-out 0.5s infinite;
-  filter: drop-shadow(0 0 8px rgba(232,109,176,0.4));
-  transition: filter 0.3s;
+  filter: drop-shadow(0 0 8px rgba(232,109,176,0.4)); transition: filter 0.3s;
 }
 .logo-text-img:hover {
   filter: drop-shadow(0 0 16px rgba(232,109,176,0.8));
   animation: logoEntrance 0s, logoFloat 4s ease-in-out infinite;
 }
-
 .logo-fallback {
-  display: none;
-  font-family: var(--font-display);
+  display: none; font-family: var(--font-display);
   font-size: 1.4rem; font-weight: 900;
   background: linear-gradient(135deg, #ffb7d5, #e86db0, #ffb7d5);
   background-size: 200% auto;
@@ -225,81 +260,39 @@ body::before {
   display: none;
   position: fixed; inset: 0; z-index: 9999;
   background: linear-gradient(135deg, #0d0b12 0%, #1a0f1f 50%, #0d0b12 100%);
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 2rem;
+  flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: 2rem;
 }
-.maint-petals {
-  position: absolute; inset: 0; overflow: hidden; pointer-events: none;
-}
+.maint-petals { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .maint-petal {
-  position: absolute;
-  width: 12px; height: 16px;
+  position: absolute; width: 12px; height: 16px;
   background: radial-gradient(ellipse at 40% 30%, #ffb7d5, #e86db0);
-  border-radius: 0 100% 0 100%;
-  opacity: 0;
+  border-radius: 0 100% 0 100%; opacity: 0;
   animation: petalFall linear infinite;
 }
 @keyframes petalFall {
   0% { transform: translateY(-20px) rotate(0deg) scale(0.8); opacity: 0; }
-  10% { opacity: 0.7; }
-  90% { opacity: 0.5; }
+  10% { opacity: 0.7; } 90% { opacity: 0.5; }
   100% { transform: translateY(110vh) rotate(720deg) scale(1.1); opacity: 0; }
 }
 .maint-logo-img {
-  height: 48px; width: auto;
-  margin-bottom: 1rem;
-  position: relative; z-index: 1;
-  animation: floatBlossom 3s ease-in-out infinite,
-             logoPulse 3s ease-in-out infinite;
+  height: 48px; width: auto; margin-bottom: 1rem; position: relative; z-index: 1;
+  animation: floatBlossom 3s ease-in-out infinite, logoPulse 3s ease-in-out infinite;
 }
 .maint-logo-fallback {
-  font-family: var(--font-display);
-  font-size: clamp(2.5rem, 6vw, 4.5rem);
-  font-weight: 900;
+  font-family: var(--font-display); font-size: clamp(2.5rem, 6vw, 4.5rem); font-weight: 900;
   background: linear-gradient(135deg, #ffb7d5, #e86db0, #f4a6cc);
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-  margin-bottom: 0.5rem;
-  position: relative; z-index: 1;
+  margin-bottom: 0.5rem; position: relative; z-index: 1;
 }
 @keyframes floatBlossom { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-12px)} }
-.maint-title {
-  font-size: clamp(1.4rem, 3vw, 2.2rem);
-  font-weight: 700;
-  color: var(--text);
-  margin-bottom: 0.75rem;
-  position: relative; z-index: 1;
-}
-.maint-sub {
-  font-size: 1rem;
-  color: var(--muted);
-  max-width: 400px;
-  line-height: 1.7;
-  position: relative; z-index: 1;
-}
-.maint-bar {
-  width: 200px; height: 3px;
-  background: var(--border);
-  border-radius: 2px;
-  margin: 2rem auto;
-  overflow: hidden;
-  position: relative; z-index: 1;
-}
-.maint-bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--accent), var(--blossom));
-  border-radius: 2px;
-  animation: barPulse 2s ease-in-out infinite;
-}
+.maint-title { font-size: clamp(1.4rem, 3vw, 2.2rem); font-weight: 700; color: var(--text); margin-bottom: 0.75rem; position: relative; z-index: 1; }
+.maint-sub { font-size: 1rem; color: var(--muted); max-width: 400px; line-height: 1.7; position: relative; z-index: 1; }
+.maint-bar { width: 200px; height: 3px; background: var(--border); border-radius: 2px; margin: 2rem auto; overflow: hidden; position: relative; z-index: 1; }
+.maint-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--blossom)); border-radius: 2px; animation: barPulse 2s ease-in-out infinite; }
 @keyframes barPulse { 0%,100%{width:20%} 50%{width:80%} }
 .maint-social { display: flex; gap: 1rem; justify-content: center; margin-top: 1.5rem; position: relative; z-index: 1; }
-.maint-social a {
-  color: var(--muted); font-size: 0.85rem; text-decoration: none;
-  border: 1px solid var(--border); border-radius: 6px; padding: 0.4rem 1rem;
-  transition: all 0.2s;
-}
+.maint-social a { color: var(--muted); font-size: 0.85rem; text-decoration: none; border: 1px solid var(--border); border-radius: 6px; padding: 0.4rem 1rem; transition: all 0.2s; }
 .maint-social a:hover { border-color: var(--accent); color: var(--accent); }
 
 /* ── NAV ─────────────────────────────────────────────────────────── */
@@ -312,43 +305,17 @@ nav {
   display: flex; align-items: center; padding: 0 1.5rem; gap: 1.25rem;
   animation: navLoad 0.4s ease both;
 }
-.logo {
-  display: flex; align-items: center; gap: 0;
-  cursor: pointer; flex-shrink: 0; user-select: none;
-  text-decoration: none;
-}
+.logo { display: flex; align-items: center; gap: 0; cursor: pointer; flex-shrink: 0; user-select: none; text-decoration: none; }
 .logo:hover .logo-text-img { filter: drop-shadow(0 0 18px rgba(232,109,176,0.9)); }
 
-.nav-search {
-  flex: 1; max-width: 480px; position: relative;
-}
-.nav-search input {
-  width: 100%;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.45rem 1rem 0.45rem 2.4rem;
-  color: var(--text);
-  font-family: var(--font-body);
-  font-size: 0.9rem;
-  outline: none;
-  transition: border-color 0.2s;
-}
+.nav-search { flex: 1; max-width: 480px; position: relative; }
+.nav-search input { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.45rem 1rem 0.45rem 2.4rem; color: var(--text); font-family: var(--font-body); font-size: 0.9rem; outline: none; transition: border-color 0.2s; }
 .nav-search input::placeholder { color: var(--muted); }
 .nav-search input:focus { border-color: var(--accent); }
 .nav-search .search-icon { position: absolute; left: 0.7rem; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 0.9rem; pointer-events: none; }
-.search-dropdown {
-  position: absolute; top: calc(100% + 6px); left: 0; right: 0;
-  background: var(--card); border: 1px solid var(--border);
-  border-radius: 10px; max-height: 420px; overflow-y: auto; z-index: 200;
-  display: none; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-}
+.search-dropdown { position: absolute; top: calc(100% + 6px); left: 0; right: 0; background: var(--card); border: 1px solid var(--border); border-radius: 10px; max-height: 420px; overflow-y: auto; z-index: 200; display: none; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
 .search-dropdown.open { display: block; }
-.sd-item {
-  display: flex; align-items: center; gap: 0.75rem;
-  padding: 0.65rem 1rem; cursor: pointer;
-  border-bottom: 1px solid var(--border); transition: background 0.15s;
-}
+.sd-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.65rem 1rem; cursor: pointer; border-bottom: 1px solid var(--border); transition: background 0.15s; }
 .sd-item:last-child { border-bottom: none; }
 .sd-item:hover { background: var(--surface); }
 .sd-thumb { width: 38px; height: 54px; object-fit: cover; border-radius: 4px; background: var(--border); flex-shrink: 0; }
@@ -358,51 +325,105 @@ nav {
 
 .nav-right { margin-left: auto; display: flex; align-items: center; gap: 0.75rem; }
 .nav-tabs { display: flex; gap: 0.25rem; }
-.ntab {
-  background: none; border: none; color: var(--muted);
-  font-family: var(--font-body); font-size: 0.82rem; font-weight: 700;
-  letter-spacing: 0.3px;
-  padding: 0.35rem 0.75rem; border-radius: 6px; cursor: pointer; transition: all 0.15s;
-}
+.ntab { background: none; border: none; color: var(--muted); font-family: var(--font-body); font-size: 0.82rem; font-weight: 700; letter-spacing: 0.3px; padding: 0.35rem 0.75rem; border-radius: 6px; cursor: pointer; transition: all 0.15s; }
 .ntab:hover { color: var(--text); background: var(--surface); }
 .ntab.active { color: var(--accent); background: rgba(232,109,176,0.1); }
 
-.nav-btn {
-  background: none; border: 1px solid var(--border);
-  color: var(--muted); border-radius: 7px;
-  padding: 0.35rem 0.85rem; font-family: var(--font-body);
-  font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
-  white-space: nowrap;
-}
+.nav-btn { background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 7px; padding: 0.35rem 0.85rem; font-family: var(--font-body); font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
 .nav-btn:hover { border-color: var(--accent); color: var(--accent); }
 .nav-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .nav-btn.primary:hover { background: var(--blossom2); border-color: var(--blossom2); }
 
+/* ── PROFILE AVATAR BUTTON ───────────────────────────────────────── */
 .avatar-btn {
   width: 32px; height: 32px; border-radius: 50%;
   background: linear-gradient(135deg, var(--accent), var(--accent2));
   border: none; cursor: pointer; display: flex; align-items: center; justify-content: center;
   font-size: 0.85rem; font-weight: 800; color: #fff;
   transition: transform 0.2s, box-shadow 0.2s;
+  position: relative;
 }
 .avatar-btn:hover { transform: scale(1.1); box-shadow: 0 0 12px rgba(232,109,176,0.5); }
 
+/* ── PROFILE DROPDOWN ────────────────────────────────────────────── */
+.profile-dropdown-wrap { position: relative; }
+.profile-dropdown {
+  position: absolute; top: calc(100% + 10px); right: 0;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 12px; min-width: 240px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  z-index: 300; display: none;
+  overflow: hidden;
+  animation: modalIn 0.2s ease;
+}
+.profile-dropdown.open { display: block; }
+.pd-header {
+  padding: 1rem; background: linear-gradient(135deg, rgba(232,109,176,0.1), rgba(244,166,204,0.05));
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 0.75rem;
+}
+.pd-avatar {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem; font-weight: 800; color: #fff; flex-shrink: 0;
+}
+.pd-name { font-size: 0.9rem; font-weight: 800; color: var(--text); }
+.pd-email { font-size: 0.72rem; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+.pd-stats {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  display: flex; gap: 1rem;
+}
+.pd-stat { text-align: center; flex: 1; }
+.pd-stat-num { font-size: 1.1rem; font-weight: 800; color: var(--accent); display: block; }
+.pd-stat-label { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+.pd-actions { padding: 0.5rem; }
+.pd-action-btn {
+  width: 100%; background: none; border: none; color: var(--muted);
+  font-family: var(--font-body); font-size: 0.83rem; font-weight: 600;
+  padding: 0.5rem 0.75rem; border-radius: 7px; cursor: pointer;
+  transition: all 0.15s; text-align: left; display: flex; align-items: center; gap: 0.5rem;
+}
+.pd-action-btn:hover { background: var(--surface); color: var(--text); }
+.pd-action-btn.danger:hover { color: #ef4444; }
+.pd-action-btn svg { flex-shrink: 0; }
+
+/* ── PROFILE / SETTINGS MODAL ─────────────────────────────────────── */
+#profileModal .modal { width: 420px; }
+.profile-avatar-section {
+  display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
+  padding: 1.25rem 0 1rem; border-bottom: 1px solid var(--border); margin-bottom: 1.25rem;
+}
+.profile-avatar-large {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.8rem; font-weight: 800; color: #fff;
+  box-shadow: 0 0 24px rgba(232,109,176,0.35);
+}
+.profile-username { font-size: 1.1rem; font-weight: 800; }
+.profile-member-since { font-size: 0.75rem; color: var(--muted); }
+.profile-stats-grid {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+.psg-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 0.75rem 0.5rem; text-align: center;
+}
+.psg-num { font-size: 1.3rem; font-weight: 800; color: var(--accent); display: block; }
+.psg-label { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+.profile-section-title { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin-bottom: 0.65rem; }
+
 /* ── GENRE TABS ──────────────────────────────────────────────────── */
 .genre-bar {
-  background: var(--surface); border-bottom: 1px solid var(--border);
-  padding: 0 1.5rem;
-  display: flex; align-items: center; gap: 0.5rem;
-  overflow-x: auto; scrollbar-width: none; height: 44px;
-  position: sticky; top: var(--nav-h); z-index: 99;
+  background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 1.5rem;
+  display: flex; align-items: center; gap: 0.5rem; overflow-x: auto; scrollbar-width: none;
+  height: 44px; position: sticky; top: var(--nav-h); z-index: 99;
 }
 .genre-bar::-webkit-scrollbar { display: none; }
-.genre-tab {
-  flex-shrink: 0;
-  background: none; border: none; color: var(--muted);
-  font-family: var(--font-body); font-size: 0.82rem; font-weight: 600;
-  padding: 0.25rem 0.9rem; border-radius: 20px; cursor: pointer; transition: all 0.15s;
-  white-space: nowrap;
-}
+.genre-tab { flex-shrink: 0; background: none; border: none; color: var(--muted); font-family: var(--font-body); font-size: 0.82rem; font-weight: 600; padding: 0.25rem 0.9rem; border-radius: 20px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
 .genre-tab:hover { color: var(--text); background: var(--card); }
 .genre-tab.active { color: var(--accent); background: rgba(232,109,176,0.12); }
 
@@ -413,108 +434,74 @@ nav {
 #home-view { display: block; }
 .home-body { display: flex; gap: 0; }
 .home-main { flex: 1; min-width: 0; }
-.home-sidebar {
-  width: var(--sidebar-w); flex-shrink: 0;
-  border-left: 1px solid var(--border);
-  padding: 1.25rem 1rem; background: var(--surface);
-}
+.home-sidebar { width: var(--sidebar-w); flex-shrink: 0; border-left: 1px solid var(--border); padding: 1.25rem 1rem; background: var(--surface); }
 
-/* HERO CAROUSEL */
-.hero {
-  position: relative; height: 420px; overflow: hidden;
-  cursor: pointer;
-}
-.hero-bg {
-  position: absolute; inset: 0;
-  background-size: cover; background-position: center 20%;
-  transition: background-image 0.5s ease;
-}
-.hero-grad {
-  position: absolute; inset: 0;
-  background: linear-gradient(to right, rgba(13,13,18,0.98) 0%, rgba(13,13,18,0.6) 50%, rgba(13,13,18,0.1) 100%),
-              linear-gradient(to top, rgba(13,13,18,1) 0%, transparent 40%);
-}
-.hero-content {
-  position: relative; z-index: 2;
-  padding: 2.5rem 2.5rem;
-  height: 100%; display: flex; flex-direction: column; justify-content: flex-end;
-  max-width: 600px;
-}
+/* HERO */
+.hero { position: relative; height: 420px; overflow: hidden; cursor: pointer; }
+.hero-bg { position: absolute; inset: 0; background-size: cover; background-position: center 20%; transition: background-image 0.5s ease; }
+.hero-grad { position: absolute; inset: 0; background: linear-gradient(to right, rgba(13,13,18,0.98) 0%, rgba(13,13,18,0.6) 50%, rgba(13,13,18,0.1) 100%), linear-gradient(to top, rgba(13,13,18,1) 0%, transparent 40%); }
+.hero-content { position: relative; z-index: 2; padding: 2.5rem 2.5rem; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; max-width: 600px; }
 .hero-badges { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
-.hbadge {
-  font-size: 0.72rem; font-weight: 700; padding: 2px 10px; border-radius: 4px;
-  border: 1px solid var(--border); color: var(--muted); background: rgba(20,20,24,0.7);
-  letter-spacing: 0.5px;
-}
+.hbadge { font-size: 0.72rem; font-weight: 700; padding: 2px 10px; border-radius: 4px; border: 1px solid var(--border); color: var(--muted); background: rgba(20,20,24,0.7); letter-spacing: 0.5px; }
 .hbadge.pink { border-color: var(--accent); color: var(--accent); background: rgba(232,109,176,0.1); }
-.hero-title {
-  font-size: clamp(1.8rem, 3.5vw, 3rem);
-  font-weight: 800; line-height: 1.1;
-  margin-bottom: 0.6rem;
-  text-shadow: 0 2px 20px rgba(0,0,0,0.8);
-  letter-spacing: -0.02em;
-}
+.hero-title { font-size: clamp(1.8rem, 3.5vw, 3rem); font-weight: 800; line-height: 1.1; margin-bottom: 0.6rem; text-shadow: 0 2px 20px rgba(0,0,0,0.8); letter-spacing: -0.02em; }
 .hero-genres { display: flex; gap: 0.4rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
-.hgenre {
-  font-size: 0.72rem; background: rgba(255,255,255,0.08);
-  border-radius: 4px; padding: 2px 8px; color: var(--text);
-  font-weight: 500;
-}
-.hero-desc {
-  font-size: 0.88rem; color: rgba(240,238,245,0.75); line-height: 1.6;
-  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
-  margin-bottom: 1.25rem;
-}
+.hgenre { font-size: 0.72rem; background: rgba(255,255,255,0.08); border-radius: 4px; padding: 2px 8px; color: var(--text); font-weight: 500; }
+.hero-desc { font-size: 0.88rem; color: rgba(240,238,245,0.75); line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 1.25rem; }
 .hero-actions { display: flex; gap: 0.75rem; align-items: center; }
+
+/* Force text rendering — no emoji on mobile */
+.btn-watch, .btn-info {
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-variant-emoji: text;
+  text-rendering: optimizeLegibility;
+}
 .btn-watch {
   background: var(--accent); color: #fff; border: none;
   border-radius: 8px; padding: 0.6rem 1.5rem;
-  font-family: var(--font-body); font-size: 0.95rem; font-weight: 700;
+  font-size: 0.95rem; font-weight: 700;
   cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 0.4rem;
 }
 .btn-watch:hover { background: var(--blossom2); box-shadow: 0 0 20px rgba(232,109,176,0.4); }
 .btn-info {
   background: rgba(255,255,255,0.1); color: var(--text);
   border: 1px solid rgba(255,255,255,0.15); border-radius: 8px;
-  padding: 0.6rem 1.25rem; font-family: var(--font-body);
+  padding: 0.6rem 1.25rem;
   font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
   backdrop-filter: blur(4px);
+  display: flex; align-items: center; gap: 0.35rem;
 }
 .btn-info:hover { background: rgba(255,255,255,0.18); }
-.hero-nav {
-  position: absolute; bottom: 1.25rem; right: 1.5rem; z-index: 3;
-  display: flex; align-items: center; gap: 0.5rem;
+
+/* Info icon forced as text glyph */
+.btn-info-icon {
+  font-style: normal;
+  font-family: var(--font-body);
+  font-variant-emoji: text;
+  speak: never;
+  display: inline-block;
+  line-height: 1;
 }
-.hero-dot {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: rgba(255,255,255,0.3); cursor: pointer; transition: all 0.2s;
-}
+
+.hero-nav { position: absolute; bottom: 1.25rem; right: 1.5rem; z-index: 3; display: flex; align-items: center; gap: 0.5rem; }
+.hero-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.3); cursor: pointer; transition: all 0.2s; }
 .hero-dot.active { background: var(--accent); width: 20px; border-radius: 3px; }
-.hero-arrow {
-  background: rgba(20,20,24,0.7); border: 1px solid var(--border);
-  color: var(--text); border-radius: 6px; width: 32px; height: 32px;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; font-size: 0.9rem; transition: all 0.15s;
-}
+.hero-arrow { background: rgba(20,20,24,0.7); border: 1px solid var(--border); color: var(--text); border-radius: 6px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 0.9rem; transition: all 0.15s; }
 .hero-arrow:hover { border-color: var(--accent); color: var(--accent); }
 
 /* WATCH HISTORY BAR */
 .history-bar { padding: 1rem 1.5rem 0; }
 .section-hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.85rem; }
-.section-hd h2 {
-  font-size: 0.78rem; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase;
-  color: var(--muted); display: flex; align-items: center; gap: 0.5rem;
-}
+.section-hd h2 { font-size: 0.78rem; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 0.5rem; }
 .section-hd h2 strong { font-size: 1.05rem; font-weight: 800; color: var(--text); text-transform: none; letter-spacing: -0.01em; display: block; }
 .see-all { font-size: 0.78rem; color: var(--muted); text-decoration: none; cursor: pointer; transition: color 0.15s; font-weight: 600; }
 .see-all:hover { color: var(--accent); }
 
 .hist-row { display: flex; gap: 0.75rem; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; }
 .hist-row::-webkit-scrollbar { display: none; }
-.hist-card {
-  flex-shrink: 0; width: 160px; cursor: pointer; position: relative;
-  border-radius: 8px; overflow: hidden; border: 1px solid var(--border); transition: border-color 0.2s;
-}
+.hist-card { flex-shrink: 0; width: 160px; cursor: pointer; position: relative; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); transition: border-color 0.2s; }
 .hist-card:hover { border-color: var(--accent); }
 .hist-thumb { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; background: var(--card); }
 .hist-prog { position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: rgba(255,255,255,0.1); }
@@ -676,42 +663,20 @@ nav {
 .comment-actions { display: flex; gap: 0.75rem; margin-top: 0.35rem; }
 .ca-btn { background: none; border: none; color: var(--muted); font-size: 0.75rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.25rem; transition: color 0.15s; font-family: var(--font-body); }
 .ca-btn:hover { color: var(--accent); }
-
 .comments-notice { background: rgba(232,109,176,0.08); border: 1px solid rgba(232,109,176,0.2); border-radius: 8px; padding: 0.75rem 1rem; font-size: 0.82rem; color: var(--muted); margin-bottom: 0.75rem; line-height: 1.5; }
 .comments-notice a { color: var(--accent); text-decoration: underline; cursor: pointer; }
 
 /* ── AUTH MODAL ──────────────────────────────────────────────────── */
-.modal-overlay {
-  position: fixed; inset: 0; background: rgba(13,13,18,0.85);
-  backdrop-filter: blur(8px); z-index: 500;
-  display: none; align-items: center; justify-content: center;
-}
+.modal-overlay { position: fixed; inset: 0; background: rgba(13,13,18,0.85); backdrop-filter: blur(8px); z-index: 500; display: none; align-items: center; justify-content: center; }
 .modal-overlay.open { display: flex; }
-.modal {
-  background: var(--card); border: 1px solid var(--border);
-  border-radius: 14px; padding: 2rem; width: 380px; max-width: 90vw;
-  position: relative; animation: modalIn 0.25s ease;
-}
+.modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 2rem; width: 380px; max-width: 90vw; position: relative; animation: modalIn 0.25s ease; }
 @keyframes modalIn { from{transform:scale(0.95);opacity:0} to{transform:scale(1);opacity:1} }
 .modal-close { position: absolute; top: 1rem; right: 1rem; background: none; border: none; color: var(--muted); font-size: 1.2rem; cursor: pointer; transition: color 0.15s; }
 .modal-close:hover { color: var(--text); }
 
-.modal-logo {
-  text-align: center; margin-bottom: 1.25rem;
-  display: flex; align-items: center; justify-content: center;
-}
-.modal-logo-img {
-  height: 36px; width: auto;
-  object-fit: contain;
-  animation: logoEntrance 0.4s ease both;
-  filter: drop-shadow(0 0 8px rgba(232,109,176,0.35));
-}
-.modal-logo-fallback {
-  font-family: var(--font-display); font-size: 1.6rem; font-weight: 900;
-  background: linear-gradient(135deg, #ffb7d5, #e86db0);
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-  display: none;
-}
+.modal-logo { text-align: center; margin-bottom: 1.25rem; display: flex; align-items: center; justify-content: center; }
+.modal-logo-img { height: 36px; width: auto; object-fit: contain; animation: logoEntrance 0.4s ease both; filter: drop-shadow(0 0 8px rgba(232,109,176,0.35)); }
+.modal-logo-fallback { font-family: var(--font-display); font-size: 1.6rem; font-weight: 900; background: linear-gradient(135deg, #ffb7d5, #e86db0); -webkit-background-clip: text; -webkit-text-fill-color: transparent; display: none; }
 .modal-logo-img.errored { display: none; }
 .modal-logo-img.errored ~ .modal-logo-fallback { display: block; }
 
@@ -727,28 +692,14 @@ nav {
 .modal-submit:hover { background: var(--blossom2); }
 .modal-error { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: #ef4444; border-radius: 6px; padding: 0.5rem 0.75rem; font-size: 0.82rem; margin-bottom: 0.75rem; display: none; }
 .modal-error.show { display: block; }
-
-.modal-divider {
-  display: flex; align-items: center; gap: 0.75rem; margin: 1rem 0;
-  color: var(--muted); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.5px;
-}
+.modal-divider { display: flex; align-items: center; gap: 0.75rem; margin: 1rem 0; color: var(--muted); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.5px; }
 .modal-divider::before, .modal-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 
-.btn-google {
-  width: 100%; background: #fff; color: #1f1f1f; border: 1px solid #dadce0;
-  border-radius: 8px; padding: 0.6rem; font-family: var(--font-body);
-  font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
-  display: flex; align-items: center; justify-content: center; gap: 0.6rem;
-  margin-bottom: 0.25rem;
-}
+.btn-google { width: 100%; background: #fff; color: #1f1f1f; border: 1px solid #dadce0; border-radius: 8px; padding: 0.6rem; font-family: var(--font-body); font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 0.6rem; margin-bottom: 0.25rem; }
 .btn-google:hover { background: #f8f8f8; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
 .btn-google svg { width: 18px; height: 18px; flex-shrink: 0; }
 
-.modal-support {
-  text-align: center; margin-top: 1.25rem; padding-top: 1rem;
-  border-top: 1px solid var(--border);
-  font-size: 0.78rem; color: var(--muted); line-height: 1.6;
-}
+.modal-support { text-align: center; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border); font-size: 0.78rem; color: var(--muted); line-height: 1.6; }
 .modal-support a { color: var(--accent); text-decoration: none; font-weight: 600; }
 .modal-support a:hover { text-decoration: underline; }
 
@@ -756,112 +707,55 @@ nav {
 .server-bar { display: flex; align-items: center; gap: 0.75rem; padding: 0.65rem 0; margin-bottom: 0.75rem; flex-wrap: wrap; }
 .server-label { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.8px; color: var(--muted); text-transform: uppercase; flex-shrink: 0; }
 .server-group { display: flex; gap: 0.4rem; flex-wrap: wrap; }
-.server-btn { display: flex; align-items: center; gap: 0.4rem; background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: 0.35rem 0.85rem; font-family: var(--font-body); font-size: 0.8rem; font-weight: 700; color: var(--muted); cursor: pointer; transition: all 0.18s; white-space: nowrap; }
+.server-btn { display: flex; align-items: center; gap: 0.4rem; background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: 0.35rem 0.85rem; font-family: var(--font-body); font-size: 0.8rem; font-weight: 700; color: var(--muted); cursor: pointer; transition: all 0.18s; white-space: nowrap; position: relative; }
 .server-btn:hover { border-color: var(--accent); color: var(--text); }
 .server-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(232,109,176,0.1); }
 .server-btn .srv-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); flex-shrink: 0; transition: background 0.18s; }
 .server-btn.active .srv-dot { background: var(--accent); }
+
+/* Server recommendation badges */
+.srv-badge {
+  position: absolute; top: -8px; left: 50%; transform: translateX(-50%);
+  font-size: 0.6rem; font-weight: 800; padding: 1px 6px; border-radius: 10px;
+  white-space: nowrap; pointer-events: none;
+  font-family: var(--font-body);
+  letter-spacing: 0.3px;
+}
+.srv-badge.best { background: var(--accent); color: #fff; }
+.srv-badge.good { background: rgba(232,109,176,0.25); color: var(--accent); border: 1px solid rgba(232,109,176,0.4); }
+
 .server-divider { width: 1px; height: 20px; background: var(--border); flex-shrink: 0; margin: 0 0.1rem; }
 .dub-toggle { display: flex; background: var(--surface); border: 1px solid var(--border); border-radius: 7px; overflow: hidden; flex-shrink: 0; margin-left: auto; }
 .dub-btn { background: none; border: none; padding: 0.35rem 0.8rem; font-family: var(--font-body); font-size: 0.78rem; font-weight: 800; letter-spacing: 0.5px; color: var(--muted); cursor: pointer; transition: all 0.15s; }
 .dub-btn.active { background: var(--accent); color: #fff; }
 
 /* ── ANISTREAM STATUS ─────────────────────────────────────────────── */
-.anistream-status {
-  display: none;
-  align-items: center; gap: 0.5rem;
-  font-size: 0.75rem; color: var(--muted);
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 6px; padding: 0.3rem 0.75rem;
-}
+.anistream-status { display: none; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 0.3rem 0.75rem; }
 .anistream-status.show { display: flex; }
-.anistream-status .as-spinner {
-  width: 10px; height: 10px;
-  border: 2px solid var(--border); border-top-color: var(--accent);
-  border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0;
-}
+.anistream-status .as-spinner { width: 10px; height: 10px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .anistream-status.error { color: #f87171; border-color: rgba(248,113,113,0.3); background: rgba(248,113,113,0.06); }
 .anistream-status.ok { color: #4ade80; border-color: rgba(74,222,128,0.3); background: rgba(74,222,128,0.06); }
 
 /* ── 404 VIEW ────────────────────────────────────────────────────── */
 #notfound-view { display: none; }
-.nf-wrap {
-  min-height: calc(100vh - var(--nav-h) - 44px);
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  text-align: center; padding: 3rem 2rem;
-  position: relative; overflow: hidden;
-}
-.nf-wrap::before {
-  content: '';
-  position: absolute; inset: 0;
-  background: radial-gradient(ellipse 500px 300px at 50% 40%, rgba(232,109,176,0.06) 0%, transparent 70%);
-  pointer-events: none;
-}
-.nf-code {
-  font-family: var(--font-display);
-  font-size: clamp(6rem, 18vw, 10rem);
-  font-weight: 900;
-  line-height: 1;
-  background: linear-gradient(135deg, #ffb7d5 0%, #e86db0 50%, #c94d94 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  margin-bottom: 0.25rem;
-  position: relative; z-index: 1;
-  letter-spacing: -0.04em;
-}
-.nf-petals {
-  display: flex; gap: 0.5rem; justify-content: center;
-  margin-bottom: 1.5rem; position: relative; z-index: 1;
-}
-.nf-petal {
-  width: 8px; height: 8px; border-radius: 50%;
-  background: var(--accent); opacity: 0.3;
-}
+.nf-wrap { min-height: calc(100vh - var(--nav-h) - 44px); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 3rem 2rem; position: relative; overflow: hidden; }
+.nf-wrap::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse 500px 300px at 50% 40%, rgba(232,109,176,0.06) 0%, transparent 70%); pointer-events: none; }
+.nf-code { font-family: var(--font-display); font-size: clamp(6rem, 18vw, 10rem); font-weight: 900; line-height: 1; background: linear-gradient(135deg, #ffb7d5 0%, #e86db0 50%, #c94d94 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 0.25rem; position: relative; z-index: 1; letter-spacing: -0.04em; }
+.nf-petals { display: flex; gap: 0.5rem; justify-content: center; margin-bottom: 1.5rem; position: relative; z-index: 1; }
+.nf-petal { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); opacity: 0.3; }
 .nf-petal:nth-child(2) { opacity: 0.6; width: 10px; height: 10px; }
 .nf-petal:nth-child(3) { opacity: 1; width: 12px; height: 12px; }
 .nf-petal:nth-child(4) { opacity: 0.6; width: 10px; height: 10px; }
 .nf-petal:nth-child(5) { opacity: 0.3; width: 8px; height: 8px; }
-.nf-title {
-  font-size: clamp(1.3rem, 4vw, 2rem);
-  font-weight: 800; margin-bottom: 0.75rem;
-  position: relative; z-index: 1;
-  letter-spacing: -0.02em;
-}
-.nf-sub {
-  font-size: 0.95rem; color: var(--muted);
-  max-width: 400px; line-height: 1.75;
-  margin-bottom: 2.5rem;
-  position: relative; z-index: 1;
-}
-.nf-sub span {
-  color: var(--accent); font-weight: 700;
-  background: rgba(232,109,176,0.1);
-  padding: 1px 8px; border-radius: 4px;
-  border: 1px solid rgba(232,109,176,0.25);
-  font-family: monospace; font-size: 0.9em;
-}
-.nf-actions {
-  display: flex; gap: 0.75rem; flex-wrap: wrap; justify-content: center;
-  position: relative; z-index: 1;
-}
-.nf-home-btn {
-  background: var(--accent); color: #fff; border: none;
-  border-radius: 8px; padding: 0.7rem 1.75rem;
-  font-family: var(--font-body); font-size: 0.95rem; font-weight: 700;
-  cursor: pointer; transition: all 0.2s;
-  display: flex; align-items: center; gap: 0.5rem;
-}
+.nf-title { font-size: clamp(1.3rem, 4vw, 2rem); font-weight: 800; margin-bottom: 0.75rem; position: relative; z-index: 1; letter-spacing: -0.02em; }
+.nf-sub { font-size: 0.95rem; color: var(--muted); max-width: 400px; line-height: 1.75; margin-bottom: 2.5rem; position: relative; z-index: 1; }
+.nf-sub span { color: var(--accent); font-weight: 700; background: rgba(232,109,176,0.1); padding: 1px 8px; border-radius: 4px; border: 1px solid rgba(232,109,176,0.25); font-family: monospace; font-size: 0.9em; }
+.nf-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; justify-content: center; position: relative; z-index: 1; }
+.nf-home-btn { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 0.7rem 1.75rem; font-family: var(--font-body); font-size: 0.95rem; font-weight: 700; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 0.5rem; }
 .nf-home-btn:hover { background: var(--blossom2); box-shadow: 0 0 24px rgba(232,109,176,0.4); transform: translateY(-1px); }
 .nf-home-btn svg { flex-shrink: 0; }
-.nf-bg-text {
-  position: absolute; bottom: -1rem; left: 50%; transform: translateX(-50%);
-  font-family: var(--font-display); font-size: clamp(8rem, 25vw, 18rem);
-  font-weight: 900; color: rgba(232,109,176,0.03);
-  white-space: nowrap; pointer-events: none; user-select: none;
-  letter-spacing: -0.04em; z-index: 0;
-}
+.nf-bg-text { position: absolute; bottom: -1rem; left: 50%; transform: translateX(-50%); font-family: var(--font-display); font-size: clamp(8rem, 25vw, 18rem); font-weight: 900; color: rgba(232,109,176,0.03); white-space: nowrap; pointer-events: none; user-select: none; letter-spacing: -0.04em; z-index: 0; }
 
 /* SKELETON */
 .skeleton { background: linear-gradient(90deg, var(--card) 25%, var(--surface) 50%, var(--card) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 6px; }
@@ -888,10 +782,30 @@ nav {
   .hero-content { padding: 1.5rem 1.25rem 1.75rem; }
   .nf-code { font-size: clamp(5rem, 22vw, 8rem); }
   .live-counter .live-label { display: none; }
+  /* Mobile: push server badges down slightly so they're readable */
+  .server-btn { margin-top: 10px; }
 }
 </style>
 </head>
 <body>
+
+<!-- DAILY STATUS BANNER -->
+<div id="daily-status-banner">
+  <div class="dsb-inner">
+    <span class="dsb-icon">🌸</span>
+    <div class="dsb-content">
+      <div class="dsb-title">
+        <span class="dsb-live-dot"></span>
+        AniBlossom.me — Daily Notice
+      </div>
+      <div class="dsb-text">
+        We're undergoing daily improvements — expect possible bugs or issues. To report a bug or issue, email:
+        <a href="mailto:support@aniblossom.me">support@aniblossom.me</a>
+      </div>
+    </div>
+    <button class="dsb-close" onclick="dismissDailyBanner()" aria-label="Dismiss">&#x2715;</button>
+  </div>
+</div>
 
 <!-- MAINTENANCE OVERLAY -->
 <div id="maintenance-overlay">
@@ -933,7 +847,6 @@ nav {
     <button class="ntab" id="ntab-top" onclick="switchTab('top')">TOP RATED</button>
   </div>
   <div class="nav-right" id="navRight">
-    <!-- Live viewer counter sits here, injected by updateAuthUI -->
     <div class="live-counter" title="People watching right now">
       <span class="live-dot"></span>
       <span id="liveViewerCount">—</span>
@@ -978,10 +891,19 @@ nav {
       <div class="hero-desc" id="heroDesc"></div>
       <div class="hero-actions" onclick="event.stopPropagation()">
         <button class="btn-watch" onclick="playHero()">
+          <!-- SVG play icon — never renders as emoji -->
           <svg width="11" height="13" viewBox="0 0 11 13" fill="currentColor" style="flex-shrink:0;margin-right:1px" aria-hidden="true"><path d="M0 0L11 6.5L0 13Z"/></svg>
           Watch Now
         </button>
-        <button class="btn-info" onclick="goToAnimeInfo()">ℹ Details</button>
+        <button class="btn-info" onclick="goToAnimeInfo()">
+          <!-- Text "i" inside SVG circle so it never becomes an emoji on mobile -->
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="flex-shrink:0">
+            <circle cx="7.5" cy="7.5" r="6.5" stroke="currentColor" stroke-width="1.5"/>
+            <rect x="6.75" y="6.25" width="1.5" height="5" rx="0.75" fill="currentColor"/>
+            <circle cx="7.5" cy="4.25" r="0.9" fill="currentColor"/>
+          </svg>
+          Details
+        </button>
       </div>
     </div>
     <div class="hero-nav" onclick="event.stopPropagation()" id="heroNav"></div>
@@ -1023,20 +945,22 @@ nav {
   <div class="watch-layout">
     <div class="watch-main">
       <div class="ep-breadcrumb">
-        <button class="back-btn" onclick="showHome()">← Back</button>
+        <button class="back-btn" onclick="showHome()">&#8592; Back</button>
       </div>
       <div class="server-bar">
         <span class="server-label">Server</span>
         <div class="server-group">
-          <button class="server-btn active" id="srv-filmu" onclick="switchServer('filmu')">
+          <button class="server-btn active" id="srv-filmu" onclick="switchServer('filmu')" style="margin-top:10px">
             <span class="srv-dot"></span> Server 1
           </button>
-          <div class="server-divider"></div>
-          <button class="server-btn" id="srv-animplay" onclick="switchServer('animplay')">
+          <div class="server-divider" style="margin-top:10px"></div>
+          <button class="server-btn" id="srv-animplay" onclick="switchServer('animplay')" style="margin-top:10px">
+            <span class="srv-badge good">Recommended</span>
             <span class="srv-dot"></span> Server 2
           </button>
-          <div class="server-divider"></div>
-          <button class="server-btn" id="srv-anistream" onclick="switchServer('anistream')">
+          <div class="server-divider" style="margin-top:10px"></div>
+          <button class="server-btn" id="srv-anistream" onclick="switchServer('anistream')" style="margin-top:10px">
+            <span class="srv-badge best">Best</span>
             <span class="srv-dot"></span> Server 3
           </button>
         </div>
@@ -1058,8 +982,8 @@ nav {
         <div class="ep-meta">
           <span class="ep-date" id="epDate"></span>
           <div class="ep-actions">
-            <button class="ep-action-btn">⚑ Report</button>
-            <button class="ep-action-btn" onclick="shareAnime()">⤴ Share</button>
+            <button class="ep-action-btn">&#9873; Report</button>
+            <button class="ep-action-btn" onclick="shareAnime()">&#10548; Share</button>
           </div>
         </div>
         <div class="ep-title" id="epTitle"></div>
@@ -1092,11 +1016,8 @@ nav {
     <div class="nf-bg-text">404</div>
     <div class="nf-code">404</div>
     <div class="nf-petals">
-      <div class="nf-petal"></div>
-      <div class="nf-petal"></div>
-      <div class="nf-petal"></div>
-      <div class="nf-petal"></div>
-      <div class="nf-petal"></div>
+      <div class="nf-petal"></div><div class="nf-petal"></div><div class="nf-petal"></div>
+      <div class="nf-petal"></div><div class="nf-petal"></div>
     </div>
     <div class="nf-title">Page not found</div>
     <p class="nf-sub" id="nfSub">
@@ -1117,11 +1038,9 @@ nav {
 <!-- AUTH MODAL -->
 <div class="modal-overlay" id="authModal">
   <div class="modal">
-    <button class="modal-close" onclick="closeAuthModal()">✕</button>
+    <button class="modal-close" onclick="closeAuthModal()">&#x2715;</button>
     <div class="modal-logo">
-      <img class="modal-logo-img"
-        src="icons/AniBlossom_text.svg"
-        alt="AniBlossom"
+      <img class="modal-logo-img" src="icons/AniBlossom_text.svg" alt="AniBlossom"
         onerror="this.classList.add('errored');this.nextElementSibling.style.display='block'">
       <span class="modal-logo-fallback">AniBlossom</span>
     </div>
@@ -1142,13 +1061,13 @@ nav {
     <div class="modal-divider">or</div>
     <div id="loginForm">
       <div class="form-group"><label>Email</label><input type="email" id="loginEmail" placeholder="you@example.com"></div>
-      <div class="form-group"><label>Password</label><input type="password" id="loginPass" placeholder="••••••••"></div>
+      <div class="form-group"><label>Password</label><input type="password" id="loginPass" placeholder="&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;"></div>
       <button class="modal-submit" onclick="doLogin()">Log In</button>
     </div>
     <div id="registerForm" style="display:none">
       <div class="form-group"><label>Display Name</label><input type="text" id="regName" placeholder="AniBlossom Fan"></div>
       <div class="form-group"><label>Email</label><input type="email" id="regEmail" placeholder="you@example.com"></div>
-      <div class="form-group"><label>Password</label><input type="password" id="regPass" placeholder="••••••••"></div>
+      <div class="form-group"><label>Password</label><input type="password" id="regPass" placeholder="&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;"></div>
       <button class="modal-submit" onclick="doRegister()">Create Account</button>
     </div>
     <div class="modal-support">
@@ -1157,8 +1076,80 @@ nav {
   </div>
 </div>
 
+<!-- PROFILE MODAL -->
+<div class="modal-overlay" id="profileModal">
+  <div class="modal" style="width:420px;max-width:92vw">
+    <button class="modal-close" onclick="closeProfileModal()">&#x2715;</button>
+    <div class="modal-logo">
+      <img class="modal-logo-img" src="icons/AniBlossom_text.svg" alt="AniBlossom"
+        onerror="this.classList.add('errored');this.nextElementSibling.style.display='block'">
+      <span class="modal-logo-fallback">AniBlossom</span>
+    </div>
+
+    <div class="profile-avatar-section">
+      <div class="profile-avatar-large" id="profileAvatarLarge">A</div>
+      <div class="profile-username" id="profileUsername">Loading...</div>
+      <div class="profile-member-since" id="profileMemberSince"></div>
+    </div>
+
+    <div class="profile-stats-grid">
+      <div class="psg-card">
+        <span class="psg-num" id="profileWatched">0</span>
+        <span class="psg-label">Watched</span>
+      </div>
+      <div class="psg-card">
+        <span class="psg-num" id="profileEpisodes">0</span>
+        <span class="psg-label">Episodes</span>
+      </div>
+      <div class="psg-card">
+        <span class="psg-num" id="profileComments">0</span>
+        <span class="psg-label">Comments</span>
+      </div>
+    </div>
+
+    <!-- Change Username -->
+    <div class="profile-section-title">Settings</div>
+    <div class="form-group">
+      <label>Username</label>
+      <input type="text" id="profileUsernameInput" placeholder="Your display name">
+    </div>
+    <div class="modal-error" id="profileError"></div>
+    <button class="modal-submit" onclick="saveUsername()" style="margin-bottom:0.75rem">Save Username</button>
+
+    <div class="modal-support">
+      Need help? <a href="mailto:support@aniblossom.me">support@aniblossom.me</a>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
+
+<!-- 404 REDIRECT SCRIPT FOR GITHUB PAGES -->
+<!-- 
+  For GitHub Pages: create a 404.html file at the root with this content:
+  
+  <!DOCTYPE html>
+  <html>
+  <head>
+    <script>
+      // Redirect unknown paths to index.html with hash
+      const path = window.location.pathname;
+      // Strip the base repo path if needed (e.g. /aniblossom/)
+      const cleaned = path.replace(/^\/[^/]+/, '') || '/';
+      if (cleaned && cleaned !== '/') {
+        window.location.replace('/' + '#/404?path=' + encodeURIComponent(cleaned));
+      } else {
+        window.location.replace('/');
+      }
+    <\/script>
+  </head>
+  <body></body>
+  </html>
+  
+  Then in handleHashChange(), the #/404?path=... pattern will show the 404 page.
+  This is already handled below.
+-->
 
 <script>
 // ── PROVIDERS ─────────────────────────────────────────────────────
@@ -1189,6 +1180,29 @@ const PROVIDERS = [
 
 function getProvider(id) {
   return PROVIDERS.find(p => p.id === id) || PROVIDERS[0];
+}
+
+// ── DAILY STATUS BANNER ──────────────────────────────────────────
+const BANNER_KEY = 'ab_daily_banner_' + new Date().toDateString();
+
+function showDailyBanner() {
+  // Show once per day (resets each new calendar day)
+  if (localStorage.getItem(BANNER_KEY)) return;
+  const banner = document.getElementById('daily-status-banner');
+  // Small delay so it doesn't flash on load
+  setTimeout(() => {
+    banner.style.display = 'block';
+    requestAnimationFrame(() => {
+      banner.classList.add('show');
+    });
+  }, 2000);
+}
+
+function dismissDailyBanner() {
+  const banner = document.getElementById('daily-status-banner');
+  banner.classList.remove('show');
+  setTimeout(() => { banner.style.display = 'none'; }, 400);
+  localStorage.setItem(BANNER_KEY, '1');
 }
 
 // ── ANISTREAM CONFIG ──────────────────────────────────────────────
@@ -1250,9 +1264,7 @@ function anistreamEmbedUrl(animeSession, epSession, title) {
 async function loadAnistreamPlayer(anime, epNumber) {
   const title = anime.title.english || anime.title.romaji;
   const cacheKey = String(anime.id);
-
   setAnistreamStatus('loading', 'Connecting to Server 3...');
-
   try {
     if (!anistreamCache[cacheKey]) {
       setAnistreamStatus('loading', 'Searching for anime...');
@@ -1261,25 +1273,19 @@ async function loadAnistreamPlayer(anime, epNumber) {
       const epData = await anistreamFetchEpisodes(animeSession);
       anistreamCache[cacheKey] = { animeSession, epData };
     }
-
     const cached = anistreamCache[cacheKey];
     anistreamAnimeSession = cached.animeSession;
     anistreamEpData = cached.epData;
-
     anistreamEpSessions = {};
     anistreamEpData.forEach(ep => { anistreamEpSessions[ep.number] = ep.session; });
-
     renderAnistreamEpSidebar(anistreamEpData, epNumber);
-
     const epObj = anistreamEpData.find(e => e.number === epNumber)
                || anistreamEpData[epNumber - 1]
                || anistreamEpData[0];
     if (!epObj) throw new Error(`Episode ${epNumber} not found on Server 3`);
-
     const epLabel = `${title} — Episode ${epObj.number}`;
     document.getElementById('playerIframe').src = anistreamEmbedUrl(anistreamAnimeSession, epObj.session, epLabel);
     setAnistreamStatus('ok', `Server 3 · ${anistreamEpData.length} eps`);
-
     const nextEp = anistreamEpData.find(e => e.number === epNumber + 1);
     if (nextEp) {
       fetch(getAnistreamBase() + '/prefetch?anime_session=' + encodeURIComponent(anistreamAnimeSession) + '&episode_session=' + encodeURIComponent(nextEp.session),
@@ -1295,7 +1301,6 @@ async function loadAnistreamPlayer(anime, epNumber) {
 function renderAnistreamEpSidebar(epData, activeEp) {
   totalEps = epData.length;
   allEpItems = epData.map(e => e.number);
-
   const pages = Math.ceil(epData.length / epPageSize);
   const btns = document.getElementById('epPageBtns');
   if (pages <= 1) {
@@ -1307,7 +1312,6 @@ function renderAnistreamEpSidebar(epData, activeEp) {
       return `<button class="ep-page-btn ${i === 0 ? 'active' : ''}" onclick="switchAnistreamEpPage(${i}, this)">${s}–${e}</button>`;
     }).join('');
   }
-
   epPageCurrent = 0;
   renderAnistreamEpSlice(epData.slice(0, epPageSize), activeEp);
 }
@@ -1344,19 +1348,16 @@ function selectEpAnistream(epNumber) {
   const title = currentAnime ? (currentAnime.title.english || currentAnime.title.romaji) : '';
   const epObj = anistreamEpData.find(e => e.number === epNumber);
   if (!epObj) { showToast('Episode not available on Server 3', 'error'); return; }
-
   const epLabel = `${title} — Episode ${epNumber}`;
   document.getElementById('playerIframe').src = anistreamEmbedUrl(anistreamAnimeSession, epObj.session, epLabel);
-
   document.querySelectorAll('.ep-item').forEach(el => el.classList.remove('active'));
   const el = document.getElementById('ep-item-' + epNumber);
   if (el) { el.classList.add('active'); el.scrollIntoView({ block: 'nearest' }); }
-
   document.getElementById('epTitle').textContent = `${epNumber}. ${escHtml(epObj.title || 'Episode ' + epNumber)}`;
   addHistory(currentAnime, epNumber);
   renderComments(currentAnime.id, epNumber);
   updateHash(currentAnime.id, epNumber);
-
+  incrementUserEpisodes();
   const nextEp = anistreamEpData.find(e => e.number === epNumber + 1);
   if (nextEp && anistreamAnimeSession) {
     fetch(getAnistreamBase() + '/prefetch?anime_session=' + encodeURIComponent(anistreamAnimeSession) + '&episode_session=' + encodeURIComponent(nextEp.session),
@@ -1382,10 +1383,7 @@ const FIELDS = `id title{romaji english native} coverImage{large extraLarge} ban
 
 // ── Cache (1-hour TTL) ────────────────────────────────────────────
 const CACHE_TTL = 60 * 60 * 1000;
-
-function cacheSet(key, data) {
-  try { localStorage.setItem('ab_cache_' + key, JSON.stringify({ ts: Date.now(), data })); } catch(e) {}
-}
+function cacheSet(key, data) { try { localStorage.setItem('ab_cache_' + key, JSON.stringify({ ts: Date.now(), data })); } catch(e) {} }
 function cacheGet(key) {
   try {
     const raw = localStorage.getItem('ab_cache_' + key);
@@ -1400,7 +1398,6 @@ async function gql(query, vars={}) {
   const r = await fetch(AL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({query, variables:vars}) });
   return (await r.json()).data;
 }
-
 async function cachedGql(cacheKey, query, vars={}) {
   const hit = cacheGet(cacheKey);
   if (hit) return hit;
@@ -1411,31 +1408,15 @@ async function cachedGql(cacheKey, query, vars={}) {
 
 async function fetchList(tab, page, genre) {
   const g = genre ? `,genre_in:["${genre}"]` : '';
-  let sort;
-  if (tab==='newest') sort = 'START_DATE_DESC';
-  else if (tab==='popular') sort = 'POPULARITY_DESC';
-  else sort = 'SCORE_DESC';
+  let sort = tab==='newest' ? 'START_DATE_DESC' : tab==='popular' ? 'POPULARITY_DESC' : 'SCORE_DESC';
   const query = `query($p:Int){Page(page:$p,perPage:20){media(type:ANIME,sort:${sort},isAdult:false${g}){${FIELDS}}}}`;
-  const key = `list_${tab}_${page}_${genre||'all'}`;
-  return cachedGql(key, query, {p:page});
+  return cachedGql(`list_${tab}_${page}_${genre||'all'}`, query, {p:page});
 }
-async function fetchTrending() {
-  return cachedGql('trending', `query{Page(perPage:5){media(type:ANIME,sort:TRENDING_DESC,isAdult:false){${FIELDS}}}}`);
-}
-async function fetchTopAiring() {
-  return cachedGql('topairing', `query{Page(perPage:10){media(type:ANIME,sort:POPULARITY_DESC,status:RELEASING,isAdult:false){id title{romaji english} coverImage{large} nextAiringEpisode{episode} averageScore format episodes}}}`);
-}
-async function fetchSearch(q) {
-  return gql(`query($q:String){Page(perPage:8){media(type:ANIME,search:$q,isAdult:false){${FIELDS}}}}`, {q});
-}
-async function fetchRelated(id) {
-  const key = `related_${id}`;
-  return cachedGql(key, `query($id:Int){Media(id:$id){recommendations(perPage:6){nodes{mediaRecommendation{id title{romaji english} coverImage{large} episodes averageScore status format}}}}}`,{id});
-}
-async function fetchAnimeById(id) {
-  const key = `anime_${id}`;
-  return cachedGql(key, `query($id:Int){Media(id:$id){${FIELDS}}}`, {id});
-}
+async function fetchTrending() { return cachedGql('trending', `query{Page(perPage:5){media(type:ANIME,sort:TRENDING_DESC,isAdult:false){${FIELDS}}}}`); }
+async function fetchTopAiring() { return cachedGql('topairing', `query{Page(perPage:10){media(type:ANIME,sort:POPULARITY_DESC,status:RELEASING,isAdult:false){id title{romaji english} coverImage{large} nextAiringEpisode{episode} averageScore format episodes}}}`); }
+async function fetchSearch(q) { return gql(`query($q:String){Page(perPage:8){media(type:ANIME,search:$q,isAdult:false){${FIELDS}}}}`, {q}); }
+async function fetchRelated(id) { return cachedGql(`related_${id}`, `query($id:Int){Media(id:$id){recommendations(perPage:6){nodes{mediaRecommendation{id title{romaji english} coverImage{large} episodes averageScore status format}}}}}`,{id}); }
+async function fetchAnimeById(id) { return cachedGql(`anime_${id}`, `query($id:Int){Media(id:$id){${FIELDS}}}`, {id}); }
 
 async function fetchEpisodeMeta(animeId) {
   const key = `epmeta_${animeId}`;
@@ -1447,6 +1428,137 @@ async function fetchEpisodeMeta(animeId) {
     cacheSet(key, eps);
     return eps;
   } catch(e) { return []; }
+}
+
+// ── USER PROFILE / FIRESTORE ──────────────────────────────────────
+// User profile doc: users/{uid}
+// Fields: username, watchedAnime (array of ids), episodesWatched (number), commentCount (number), createdAt
+
+window.ensureUserProfile = async function(user) {
+  const fb = window.__fb;
+  if (!fb) return;
+  try {
+    const ref = fb.doc(fb.db, 'users', user.uid);
+    const snap = await fb.getDoc(ref);
+    if (!snap.exists()) {
+      await fb.setDoc(ref, {
+        username: user.displayName || user.email?.split('@')[0] || 'AniBlossom Fan',
+        email: user.email || '',
+        watchedAnime: [],
+        episodesWatched: 0,
+        commentCount: 0,
+        createdAt: fb.serverTimestamp()
+      });
+    }
+  } catch(e) { console.warn('Profile init failed:', e); }
+};
+
+async function getUserProfile() {
+  const user = window.__currentUser;
+  const fb = window.__fb;
+  if (!user || !fb) return null;
+  try {
+    const ref = fb.doc(fb.db, 'users', user.uid);
+    const snap = await fb.getDoc(ref);
+    return snap.exists() ? snap.data() : null;
+  } catch(e) { return null; }
+}
+
+async function incrementUserEpisodes() {
+  const user = window.__currentUser;
+  const fb = window.__fb;
+  if (!user || !fb) return;
+  try {
+    const ref = fb.doc(fb.db, 'users', user.uid);
+    await fb.updateDoc(ref, { episodesWatched: fb.increment(1) });
+  } catch(e) {}
+}
+
+async function trackWatchedAnime(animeId) {
+  const user = window.__currentUser;
+  const fb = window.__fb;
+  if (!user || !fb) return;
+  try {
+    const ref = fb.doc(fb.db, 'users', user.uid);
+    const snap = await fb.getDoc(ref);
+    if (snap.exists()) {
+      const watched = snap.data().watchedAnime || [];
+      if (!watched.includes(String(animeId))) {
+        watched.push(String(animeId));
+        await fb.updateDoc(ref, { watchedAnime: watched });
+      }
+    }
+  } catch(e) {}
+}
+
+async function openProfileModal() {
+  document.getElementById('profileModal').classList.add('open');
+  const user = window.__currentUser;
+  if (!user) return;
+
+  // Set initial values from auth
+  const initials = user.displayName ? user.displayName[0].toUpperCase() : (user.email?.[0]?.toUpperCase() || 'A');
+  document.getElementById('profileAvatarLarge').textContent = initials;
+  document.getElementById('profileUsername').textContent = user.displayName || 'AniBlossom Fan';
+  document.getElementById('profileUsernameInput').value = user.displayName || '';
+  document.getElementById('profileMemberSince').textContent = user.metadata?.creationTime ? 'Member since ' + new Date(user.metadata.creationTime).toLocaleDateString('en-US', {month:'long', year:'numeric'}) : '';
+
+  // Load history stats
+  const history = getHistory();
+  document.getElementById('profileWatched').textContent = history.length;
+
+  // Load Firestore stats
+  const profile = await getUserProfile();
+  if (profile) {
+    document.getElementById('profileEpisodes').textContent = profile.episodesWatched || 0;
+    document.getElementById('profileComments').textContent = profile.commentCount || 0;
+    document.getElementById('profileWatched').textContent = (profile.watchedAnime || []).length || history.length;
+    if (profile.username) {
+      document.getElementById('profileUsername').textContent = profile.username;
+      document.getElementById('profileUsernameInput').value = profile.username;
+    }
+  }
+}
+
+function closeProfileModal() {
+  document.getElementById('profileModal').classList.remove('open');
+  document.getElementById('profileError').classList.remove('show');
+}
+
+async function saveUsername() {
+  const user = window.__currentUser;
+  const fb = window.__fb;
+  if (!user || !fb) return;
+  const newName = document.getElementById('profileUsernameInput').value.trim();
+  if (!newName) {
+    const err = document.getElementById('profileError');
+    err.textContent = 'Username cannot be empty.';
+    err.classList.add('show');
+    return;
+  }
+  if (newName.length > 32) {
+    const err = document.getElementById('profileError');
+    err.textContent = 'Username must be 32 characters or less.';
+    err.classList.add('show');
+    return;
+  }
+  document.getElementById('profileError').classList.remove('show');
+  try {
+    // Update Firebase Auth display name
+    await fb.updateProfile(user, { displayName: newName });
+    // Update Firestore
+    const ref = fb.doc(fb.db, 'users', user.uid);
+    await fb.updateDoc(ref, { username: newName });
+    window.__currentUser = user;
+    document.getElementById('profileUsername').textContent = newName;
+    document.getElementById('profileAvatarLarge').textContent = newName[0].toUpperCase();
+    updateAuthUI(user);
+    showToast('Username updated!', 'success');
+  } catch(e) {
+    const err = document.getElementById('profileError');
+    err.textContent = e.message || 'Failed to update username.';
+    err.classList.add('show');
+  }
 }
 
 // ── State ─────────────────────────────────────────────────────────
@@ -1462,10 +1574,6 @@ let commentsUnsub = null;
 let _suppressHashChange = false;
 
 // ── HASH ROUTING ──────────────────────────────────────────────────
-// Format: #/watch/{animeId}/{ep}  or  # (home)
-// This fixes: refresh restores state, back button works, shareable episode URLs,
-// and 404 shows for unknown hashes.
-
 function updateHash(animeId, ep) {
   _suppressHashChange = true;
   location.hash = `#/watch/${animeId}/${ep}`;
@@ -1482,7 +1590,6 @@ async function handleHashChange() {
   if (_suppressHashChange) return;
   const hash = location.hash;
 
-  // Home: empty hash or #home
   if (!hash || hash === '#' || hash === '#/' || hash === '#home') {
     if (document.getElementById('watch-view').style.display === 'block') {
       _internalShowHome();
@@ -1490,12 +1597,18 @@ async function handleHashChange() {
     return;
   }
 
-  // Watch route: #/watch/{animeId}/{ep}
+  // GitHub Pages 404 redirect: #/404?path=...
+  const notFoundMatch = hash.match(/^#\/404/);
+  if (notFoundMatch) {
+    const params = new URLSearchParams(hash.split('?')[1] || '');
+    show404(params.get('path') || hash);
+    return;
+  }
+
   const watchMatch = hash.match(/^#\/watch\/(\d+)\/(\d+)$/);
   if (watchMatch) {
     const animeId = parseInt(watchMatch[1]);
     const ep = parseInt(watchMatch[2]);
-    // Only reload if different anime/ep or if on home view
     if (document.getElementById('home-view').style.display !== 'none' ||
         !currentAnime || currentAnime.id !== animeId || currentEp !== ep) {
       try {
@@ -1514,7 +1627,6 @@ async function handleHashChange() {
     return;
   }
 
-  // Unknown hash → 404
   show404(hash);
 }
 
@@ -1535,12 +1647,11 @@ function renderHistory() {
   const sec = document.getElementById('historySection');
   if (!h.length) { sec.style.display = 'none'; return; }
   sec.style.display = 'block';
-  const row = document.getElementById('histRow');
-  row.innerHTML = h.map((x,i) => `
+  document.getElementById('histRow').innerHTML = h.map((x,i) => `
     <div class="hist-card" onclick="openFromHistory(${i})">
       <img class="hist-thumb" src="${x.img}" alt="${x.title}" loading="lazy">
       <div class="hist-ep-tag">EP ${x.ep}</div>
-      <div class="hist-close" onclick="event.stopPropagation();removeHistory(${x.id})">✕</div>
+      <div class="hist-close" onclick="event.stopPropagation();removeHistory(${x.id})">&#x2715;</div>
       <div class="hist-name">${x.title}</div>
     </div>`).join('');
 }
@@ -1574,7 +1685,7 @@ function renderHero() {
   if (bg) document.getElementById('heroBg').style.backgroundImage = `url(${bg})`;
   document.getElementById('heroBadges').innerHTML = `
     ${a.format?`<span class="hbadge">${a.format}</span>`:''}
-    ${a.averageScore?`<span class="hbadge pink">★ ${(a.averageScore/10).toFixed(1)}</span>`:''}
+    ${a.averageScore?`<span class="hbadge pink">&#x2605; ${(a.averageScore/10).toFixed(1)}</span>`:''}
     ${a.startDate?.year?`<span class="hbadge">${a.startDate.year}</span>`:''}
     ${a.status?`<span class="hbadge">${a.status}</span>`:''}
   `;
@@ -1583,9 +1694,9 @@ function renderHero() {
 function renderHeroNav() {
   const nav = document.getElementById('heroNav');
   nav.innerHTML = `
-    <button class="hero-arrow" onclick="stepHero(-1)">‹</button>
+    <button class="hero-arrow" onclick="stepHero(-1)">&#x2039;</button>
     ${heroList.map((_,i)=>`<div class="hero-dot${i===0?' active':''}" onclick="jumpHero(${i})"></div>`).join('')}
-    <button class="hero-arrow" onclick="stepHero(1)">›</button>`;
+    <button class="hero-arrow" onclick="stepHero(1)">&#x203a;</button>`;
 }
 function stepHero(d) { currentHeroIdx = (currentHeroIdx+heroList.length+d)%heroList.length; renderHero(); updateHeroDots(); }
 function jumpHero(i) { currentHeroIdx = i; renderHero(); updateHeroDots(); }
@@ -1605,7 +1716,7 @@ function renderGrid(list) {
     return `<div class="ac" onclick="openWatch(${JSON.stringify(a).replace(/"/g,'&quot;')})">
       <div class="ac-img-w">
         <img src="${a.coverImage.large}" alt="${title}" loading="lazy" onerror="this.src='data:image/svg+xml,<svg xmlns=&quot;http://www.w3.org/2000/svg&quot; viewBox=&quot;0 0 100 150&quot;><rect fill=&quot;%23242430&quot; width=&quot;100&quot; height=&quot;150&quot;/></svg>'">
-        ${score?`<div class="ac-score">★ ${score}</div>`:''}
+        ${score?`<div class="ac-score">&#x2605; ${score}</div>`:''}
         ${eps?`<div class="ac-ep">${eps}</div>`:''}
         ${airing?`<div class="ac-dot"></div>`:''}
       </div>
@@ -1621,9 +1732,9 @@ function renderPagination(currentPage) {
   const pg = document.getElementById('pagination');
   const pages = [currentPage-1, currentPage, currentPage+1].filter(p=>p>0&&p<=100);
   pg.innerHTML = `
-    <button class="pg-btn" onclick="goPage(${currentPage-1})" ${currentPage<=1?'disabled':''}>‹ Prev</button>
+    <button class="pg-btn" onclick="goPage(${currentPage-1})" ${currentPage<=1?'disabled':''}>&#x2039; Prev</button>
     ${pages.map(p=>`<button class="pg-btn ${p===currentPage?'active':''}" onclick="goPage(${p})">${p}</button>`).join('')}
-    <button class="pg-btn" onclick="goPage(${currentPage+1})">Next ›</button>`;
+    <button class="pg-btn" onclick="goPage(${currentPage+1})">Next &#x203a;</button>`;
 }
 
 async function goPage(p) {
@@ -1668,7 +1779,7 @@ async function loadSidebar() {
   document.getElementById('sbTopAiring').innerHTML = list.map(a => {
     const title = a.title.english||a.title.romaji;
     const ep = a.nextAiringEpisode?.episode ? `EP ${a.nextAiringEpisode.episode-1} / ${a.episodes||'?'}` : `${a.episodes||'?'} EPS`;
-    const score = a.averageScore ? `★ ${(a.averageScore/10).toFixed(1)}` : '';
+    const score = a.averageScore ? `&#x2605; ${(a.averageScore/10).toFixed(1)}` : '';
     const airing = a.status==='RELEASING';
     return `<div class="sb-item" onclick='openWatch(${JSON.stringify(a)})'>
       <img class="sb-thumb" src="${a.coverImage.large}" loading="lazy">
@@ -1710,6 +1821,7 @@ function openWatch(anime, ep=1) {
   loadRelated(anime.id);
   renderComments(anime.id, ep);
   addHistory(anime, ep);
+  trackWatchedAnime(anime.id);
   updateHash(anime.id, ep);
 }
 
@@ -1737,7 +1849,7 @@ function switchServer(server) {
   if (server === 'anistream') {
     document.getElementById('dubToggle').style.display = 'none';
     if (currentAnime) loadAnistreamPlayer(currentAnime, currentEp);
-    showToast('Switched to Server 3', 'success');
+    showToast('Switched to Server 3 (Best)', 'success');
   } else {
     hideAnistreamStatus();
     if (anistreamEpData.length) buildEpSidebar(currentAnime);
@@ -1792,7 +1904,6 @@ async function buildEpSidebar(anime) {
   currentEpMeta = [];
   renderEpPages();
   renderEpList(allEpItems.slice(0, epPageSize), currentEp);
-
   const meta = await fetchEpisodeMeta(anime.id);
   if (meta && meta.length) {
     currentEpMeta = meta;
@@ -1815,8 +1926,7 @@ function switchEpPage(i, btn) {
   epPageCurrent = i;
   document.querySelectorAll('.ep-page-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
-  const slice = allEpItems.slice(i*epPageSize, (i+1)*epPageSize);
-  renderEpList(slice, currentEp);
+  renderEpList(allEpItems.slice(i*epPageSize, (i+1)*epPageSize), currentEp);
 }
 
 function getEpMeta(epNum) {
@@ -1861,15 +1971,14 @@ function selectEp(ep) {
   addHistory(currentAnime, ep);
   renderComments(currentAnime.id, ep);
   updateHash(currentAnime.id, ep);
+  incrementUserEpisodes();
 }
 
 function filterEps(q) {
   if (currentServer === 'anistream' && anistreamEpData.length) {
     const lq = q.toLowerCase();
     const filtered = anistreamEpData.filter(ep =>
-      String(ep.number).includes(q) ||
-      (ep.title || '').toLowerCase().includes(lq)
-    );
+      String(ep.number).includes(q) || (ep.title || '').toLowerCase().includes(lq));
     renderAnistreamEpSlice(filtered, currentEp);
     return;
   }
@@ -1896,7 +2005,7 @@ async function loadRelated(id) {
         <img class="rel-thumb" src="${a.coverImage.large}" loading="lazy">
         <div class="rel-info">
           <div class="rel-name">${airing?'<span class="rel-live"></span>':''}${title}</div>
-          <div class="rel-meta">${a.format||''} ${a.episodes?'· '+a.episodes+' eps':''} ${a.averageScore?'· ★'+(a.averageScore/10).toFixed(1):''}</div>
+          <div class="rel-meta">${a.format||''} ${a.episodes?'· '+a.episodes+' eps':''} ${a.averageScore?'· &#x2605;'+(a.averageScore/10).toFixed(1):''}</div>
         </div>
       </div>`;
     }).join('');
@@ -1907,10 +2016,8 @@ async function loadRelated(id) {
 function renderComments(animeId, ep) {
   const wrap = document.getElementById('commentsWrap');
   if (commentsUnsub) { commentsUnsub(); commentsUnsub = null; }
-
   const fb = window.__fb;
   if (!fb) { wrap.innerHTML = ''; return; }
-
   const user = window.__currentUser;
   const commentKey = `${animeId}-${ep}`;
 
@@ -1958,12 +2065,12 @@ function renderComments(animeId, ep) {
             <div class="comment-body">
               <div class="comment-meta">
                 <span class="comment-user">${escHtml(c.userName||'Anonymous')}</span>
-                <span class="comment-time">• ${t}</span>
+                <span class="comment-time">&#x2022; ${t}</span>
               </div>
               <div class="comment-text">${escHtml(c.text)}</div>
               <div class="comment-actions">
-                <button class="ca-btn">👍 ${c.likes||0}</button>
-                <button class="ca-btn">↩ Reply</button>
+                <button class="ca-btn">&#x1F44D; ${c.likes||0}</button>
+                <button class="ca-btn">&#x21A9; Reply</button>
               </div>
             </div>
           </div>`;
@@ -2002,6 +2109,11 @@ async function postComment(key) {
     });
     ta.value = '';
     showToast('Comment posted!', 'success');
+    // Increment comment count in user profile
+    try {
+      const ref = fb.doc(fb.db, 'users', user.uid);
+      await fb.updateDoc(ref, { commentCount: fb.increment(1) });
+    } catch(e) {}
   } catch(e) {
     if (e.code === 'permission-denied') showToast('Permission denied. Check Firestore rules.', 'error');
     else showToast('Failed to post comment.', 'error');
@@ -2103,23 +2215,91 @@ async function doRegister() {
 
 window.updateAuthUI = function(user) {
   const nr = document.getElementById('navRight');
-  // Always keep the live counter, rebuild the rest
   const counter = `<div class="live-counter" title="People watching right now">
     <span class="live-dot"></span>
-    <span id="liveViewerCount">—</span>
+    <span id="liveViewerCount">&#x2014;</span>
     <span class="live-label" style="color:var(--muted);font-weight:500"> watching</span>
   </div>`;
+
   if (user) {
     const initials = user.displayName ? user.displayName[0].toUpperCase() : user.email[0].toUpperCase();
     nr.innerHTML = counter + `
-      <button class="avatar-btn" title="${escHtml(user.displayName||user.email)}">${escHtml(initials)}</button>
-      <button class="nav-btn" onclick="doSignOut()">Sign Out</button>`;
+      <div class="profile-dropdown-wrap" id="profileDropdownWrap">
+        <button class="avatar-btn" title="${escHtml(user.displayName||user.email)}" onclick="toggleProfileDropdown()">${escHtml(initials)}</button>
+        <div class="profile-dropdown" id="profileDropdown">
+          <div class="pd-header">
+            <div class="pd-avatar">${escHtml(initials)}</div>
+            <div>
+              <div class="pd-name">${escHtml(user.displayName || 'AniBlossom Fan')}</div>
+              <div class="pd-email">${escHtml(user.email || '')}</div>
+            </div>
+          </div>
+          <div class="pd-stats">
+            <div class="pd-stat">
+              <span class="pd-stat-num" id="dropdownWatched">&#x2014;</span>
+              <span class="pd-stat-label">Watched</span>
+            </div>
+            <div class="pd-stat">
+              <span class="pd-stat-num" id="dropdownEpisodes">&#x2014;</span>
+              <span class="pd-stat-label">Episodes</span>
+            </div>
+            <div class="pd-stat">
+              <span class="pd-stat-num" id="dropdownComments">&#x2014;</span>
+              <span class="pd-stat-label">Comments</span>
+            </div>
+          </div>
+          <div class="pd-actions">
+            <button class="pd-action-btn" onclick="closeProfileDropdown();openProfileModal()">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style="flex-shrink:0"><circle cx="6.5" cy="4" r="2.5" stroke="currentColor" stroke-width="1.3"/><path d="M1 11.5C1 9.567 3.462 8 6.5 8s5.5 1.567 5.5 3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+              Profile &amp; Settings
+            </button>
+            <button class="pd-action-btn danger" onclick="closeProfileDropdown();doSignOut()">
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style="flex-shrink:0"><path d="M5 2H2a1 1 0 00-1 1v7a1 1 0 001 1h3M9 9l3-2.5L9 4M5 6.5h7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </div>`;
+
+    // Load quick stats for dropdown
+    getUserProfile().then(profile => {
+      if (profile) {
+        const dw = document.getElementById('dropdownWatched');
+        const de = document.getElementById('dropdownEpisodes');
+        const dc = document.getElementById('dropdownComments');
+        if (dw) dw.textContent = (profile.watchedAnime||[]).length || getHistory().length;
+        if (de) de.textContent = profile.episodesWatched || 0;
+        if (dc) dc.textContent = profile.commentCount || 0;
+      } else {
+        const dw = document.getElementById('dropdownWatched');
+        if (dw) dw.textContent = getHistory().length;
+      }
+    });
+
   } else {
     nr.innerHTML = counter + `
       <button class="nav-btn" onclick="openAuthModal('login')">Log In</button>
       <button class="nav-btn primary" onclick="openAuthModal('register')">Sign Up</button>`;
   }
 };
+
+function toggleProfileDropdown() {
+  const dd = document.getElementById('profileDropdown');
+  if (dd) dd.classList.toggle('open');
+}
+
+function closeProfileDropdown() {
+  const dd = document.getElementById('profileDropdown');
+  if (dd) dd.classList.remove('open');
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', (e) => {
+  const wrap = document.getElementById('profileDropdownWrap');
+  if (wrap && !wrap.contains(e.target)) {
+    closeProfileDropdown();
+  }
+});
 
 async function doSignOut() {
   const fb = window.__fb;
@@ -2205,16 +2385,14 @@ function timeAgo(d) {
 // ── Init ──────────────────────────────────────────────────────────
 (async () => {
   renderHistory();
+  showDailyBanner();
 
-  // Load home data
   await Promise.all([
     fetchTrending().then(d=>setHero(d.Page.media)),
     loadHome(false),
     loadSidebar()
   ]);
 
-  // After content is loaded, handle the initial hash
-  // This restores state on refresh or handles shared links
   await handleHashChange();
 })();
 </script>
