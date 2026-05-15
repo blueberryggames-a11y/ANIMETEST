@@ -35,15 +35,13 @@
 
   window.__fb = { auth, db, rtdb, ref, onValue, onDisconnect, set, remove, push, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup, googleProvider, doc, getDoc, setDoc, addDoc, collection, query, where, orderBy, onSnapshot, serverTimestamp, getDocs, updateDoc, increment };
 
-  // ── MAINTENANCE MODE (live Firestore listener on 'matience mode' collection) ──
-  // Collection: "matience mode", document: "matienceonoroff" (field: matienceonoroff: true/false)
+  // ── MAINTENANCE MODE ──────────────────────────────────────────
   const maintDoc = doc(db, 'matience mode', 'matienceonoroff');
   onSnapshot(maintDoc, (snap) => {
     const inMaintenance = snap.exists() && snap.data().matienceonoroff === true;
     document.getElementById('maintenance-overlay').style.display = inMaintenance ? 'flex' : 'none';
     document.getElementById('app').style.display = inMaintenance ? 'none' : 'block';
   }, () => {
-    // On error (no access, etc), just show app normally
     document.getElementById('app').style.display = 'block';
   });
 
@@ -144,6 +142,72 @@ body::before {
   0%   { background-position: -200% center; }
   100% { background-position: 200% center; }
 }
+
+/* ── ANNOUNCEMENT BAR ────────────────────────────────────────────── */
+#announcement-bar {
+  width: 100%;
+  background: linear-gradient(90deg, #c94d94 0%, #e86db0 40%, #ffb7d5 100%);
+  color: #fff;
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  font-weight: 700;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0.5rem 1rem;
+  position: relative;
+  z-index: 98;
+  letter-spacing: 0.01em;
+  box-shadow: 0 2px 12px rgba(232,109,176,0.35);
+  overflow: hidden;
+}
+#announcement-bar::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.1) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: announcementShimmer 3s linear infinite;
+  pointer-events: none;
+}
+@keyframes announcementSlide {
+  from { opacity: 0; transform: translateY(-100%); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes announcementShimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+#announcement-bar.show {
+  display: flex;
+  animation: announcementSlide 0.4s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+.ann-icon {
+  font-size: 0.95rem; flex-shrink: 0;
+  filter: drop-shadow(0 0 4px rgba(255,255,255,0.5));
+  animation: annPulse 2s ease-in-out infinite;
+}
+@keyframes annPulse {
+  0%,100% { transform: scale(1); }
+  50%      { transform: scale(1.2); }
+}
+.ann-text {
+  flex: 1; text-align: center;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  line-height: 1.4;
+  position: relative; z-index: 1;
+}
+.ann-close {
+  background: rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.35);
+  color: #fff; border-radius: 50%;
+  width: 20px; height: 20px;
+  font-size: 0.65rem; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; transition: background 0.15s;
+  line-height: 1; position: relative; z-index: 1;
+}
+.ann-close:hover { background: rgba(255,255,255,0.4); }
 
 /* ── DAILY STATUS BANNER ─────────────────────────────────────────── */
 #daily-status-banner {
@@ -450,7 +514,6 @@ nav {
 .hero-desc { font-size: 0.88rem; color: rgba(240,238,245,0.75); line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 1.25rem; }
 .hero-actions { display: flex; gap: 0.75rem; align-items: center; }
 
-/* Force text rendering — no emoji on mobile */
 .btn-watch, .btn-info {
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
@@ -475,7 +538,6 @@ nav {
 }
 .btn-info:hover { background: rgba(255,255,255,0.18); }
 
-/* Info icon forced as text glyph */
 .btn-info-icon {
   font-style: normal;
   font-family: var(--font-body);
@@ -713,13 +775,11 @@ nav {
 .server-btn .srv-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); flex-shrink: 0; transition: background 0.18s; }
 .server-btn.active .srv-dot { background: var(--accent); }
 
-/* Server recommendation badges */
 .srv-badge {
   position: absolute; top: -8px; left: 50%; transform: translateX(-50%);
   font-size: 0.6rem; font-weight: 800; padding: 1px 6px; border-radius: 10px;
   white-space: nowrap; pointer-events: none;
-  font-family: var(--font-body);
-  letter-spacing: 0.3px;
+  font-family: var(--font-body); letter-spacing: 0.3px;
 }
 .srv-badge.best { background: var(--accent); color: #fff; }
 .srv-badge.good { background: rgba(232,109,176,0.25); color: var(--accent); border: 1px solid rgba(232,109,176,0.4); }
@@ -782,8 +842,8 @@ nav {
   .hero-content { padding: 1.5rem 1.25rem 1.75rem; }
   .nf-code { font-size: clamp(5rem, 22vw, 8rem); }
   .live-counter .live-label { display: none; }
-  /* Mobile: push server badges down slightly so they're readable */
   .server-btn { margin-top: 10px; }
+  .ann-text { font-size: 0.75rem; }
 }
 </style>
 </head>
@@ -826,6 +886,13 @@ nav {
 
 <!-- APP -->
 <div id="app" style="display:none">
+
+<!-- ANNOUNCEMENT BAR -->
+<div id="announcement-bar">
+  <span class="ann-icon">🌸</span>
+  <span class="ann-text" id="announcementText"></span>
+  <button class="ann-close" id="announcementClose" aria-label="Dismiss">&#x2715;</button>
+</div>
 
 <!-- NAV -->
 <nav>
@@ -891,12 +958,10 @@ nav {
       <div class="hero-desc" id="heroDesc"></div>
       <div class="hero-actions" onclick="event.stopPropagation()">
         <button class="btn-watch" onclick="playHero()">
-          <!-- SVG play icon — never renders as emoji -->
           <svg width="11" height="13" viewBox="0 0 11 13" fill="currentColor" style="flex-shrink:0;margin-right:1px" aria-hidden="true"><path d="M0 0L11 6.5L0 13Z"/></svg>
           Watch Now
         </button>
         <button class="btn-info" onclick="goToAnimeInfo()">
-          <!-- Text "i" inside SVG circle so it never becomes an emoji on mobile -->
           <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="flex-shrink:0">
             <circle cx="7.5" cy="7.5" r="6.5" stroke="currentColor" stroke-width="1.5"/>
             <rect x="6.75" y="6.25" width="1.5" height="5" rx="0.75" fill="currentColor"/>
@@ -1107,7 +1172,6 @@ nav {
       </div>
     </div>
 
-    <!-- Change Username -->
     <div class="profile-section-title">Settings</div>
     <div class="form-group">
       <label>Username</label>
@@ -1124,32 +1188,6 @@ nav {
 
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
-
-<!-- 404 REDIRECT SCRIPT FOR GITHUB PAGES -->
-<!-- 
-  For GitHub Pages: create a 404.html file at the root with this content:
-  
-  <!DOCTYPE html>
-  <html>
-  <head>
-    <script>
-      // Redirect unknown paths to index.html with hash
-      const path = window.location.pathname;
-      // Strip the base repo path if needed (e.g. /aniblossom/)
-      const cleaned = path.replace(/^\/[^/]+/, '') || '/';
-      if (cleaned && cleaned !== '/') {
-        window.location.replace('/' + '#/404?path=' + encodeURIComponent(cleaned));
-      } else {
-        window.location.replace('/');
-      }
-    <\/script>
-  </head>
-  <body></body>
-  </html>
-  
-  Then in handleHashChange(), the #/404?path=... pattern will show the 404 page.
-  This is already handled below.
--->
 
 <script>
 // ── PROVIDERS ─────────────────────────────────────────────────────
@@ -1182,19 +1220,81 @@ function getProvider(id) {
   return PROVIDERS.find(p => p.id === id) || PROVIDERS[0];
 }
 
+// ── ANNOUNCEMENTS ─────────────────────────────────────────────────
+function initAnnouncements() {
+  const fb = window.__fb;
+  if (!fb) { setTimeout(initAnnouncements, 500); return; }
+
+  const bar     = document.getElementById('announcement-bar');
+  const textEl  = document.getElementById('announcementText');
+  const closeBtn= document.getElementById('announcementClose');
+
+  let activeDocId = null;
+  let autoHideTimer = null;
+
+  const q = fb.collection(fb.db, 'announcements');
+  fb.onSnapshot(q, (snap) => {
+    const now = Date.now();
+    let found = null;
+
+    snap.forEach(doc => {
+      const d = doc.data();
+      if (!d.announcementtext) return;
+      // Skip if user dismissed this one this session
+      if (sessionStorage.getItem('ann_dismissed_' + doc.id)) return;
+      // Check expiry
+      const endsAt = d.endsAt?.toMillis ? d.endsAt.toMillis() : null;
+      if (endsAt && endsAt < now) return;
+      if (!found) found = { id: doc.id, text: d.announcementtext, endsAt };
+    });
+
+    clearTimeout(autoHideTimer);
+
+    if (found) {
+      activeDocId = found.id;
+      textEl.textContent = found.text;
+      bar.classList.add('show');
+      // Schedule auto-hide when endsAt arrives
+      if (found.endsAt) {
+        const remaining = found.endsAt - Date.now();
+        if (remaining > 0) {
+          autoHideTimer = setTimeout(() => {
+            if (activeDocId === found.id) {
+              bar.classList.remove('show');
+              activeDocId = null;
+            }
+          }, remaining);
+        }
+      }
+    } else {
+      bar.classList.remove('show');
+      activeDocId = null;
+    }
+  }, () => {
+    // Permission error — just hide bar silently
+    bar.classList.remove('show');
+  });
+
+  closeBtn.addEventListener('click', () => {
+    if (activeDocId) {
+      sessionStorage.setItem('ann_dismissed_' + activeDocId, '1');
+      bar.classList.remove('show');
+      clearTimeout(autoHideTimer);
+      activeDocId = null;
+    }
+  });
+}
+initAnnouncements();
+
 // ── DAILY STATUS BANNER ──────────────────────────────────────────
 const BANNER_KEY = 'ab_daily_banner_' + new Date().toDateString();
 
 function showDailyBanner() {
-  // Show once per day (resets each new calendar day)
   if (localStorage.getItem(BANNER_KEY)) return;
   const banner = document.getElementById('daily-status-banner');
-  // Small delay so it doesn't flash on load
   setTimeout(() => {
     banner.style.display = 'block';
-    requestAnimationFrame(() => {
-      banner.classList.add('show');
-    });
+    requestAnimationFrame(() => { banner.classList.add('show'); });
   }, 2000);
 }
 
@@ -1431,9 +1531,6 @@ async function fetchEpisodeMeta(animeId) {
 }
 
 // ── USER PROFILE / FIRESTORE ──────────────────────────────────────
-// User profile doc: users/{uid}
-// Fields: username, watchedAnime (array of ids), episodesWatched (number), commentCount (number), createdAt
-
 window.ensureUserProfile = async function(user) {
   const fb = window.__fb;
   if (!fb) return;
@@ -1495,19 +1592,13 @@ async function openProfileModal() {
   document.getElementById('profileModal').classList.add('open');
   const user = window.__currentUser;
   if (!user) return;
-
-  // Set initial values from auth
   const initials = user.displayName ? user.displayName[0].toUpperCase() : (user.email?.[0]?.toUpperCase() || 'A');
   document.getElementById('profileAvatarLarge').textContent = initials;
   document.getElementById('profileUsername').textContent = user.displayName || 'AniBlossom Fan';
   document.getElementById('profileUsernameInput').value = user.displayName || '';
   document.getElementById('profileMemberSince').textContent = user.metadata?.creationTime ? 'Member since ' + new Date(user.metadata.creationTime).toLocaleDateString('en-US', {month:'long', year:'numeric'}) : '';
-
-  // Load history stats
   const history = getHistory();
   document.getElementById('profileWatched').textContent = history.length;
-
-  // Load Firestore stats
   const profile = await getUserProfile();
   if (profile) {
     document.getElementById('profileEpisodes').textContent = profile.episodesWatched || 0;
@@ -1533,20 +1624,16 @@ async function saveUsername() {
   if (!newName) {
     const err = document.getElementById('profileError');
     err.textContent = 'Username cannot be empty.';
-    err.classList.add('show');
-    return;
+    err.classList.add('show'); return;
   }
   if (newName.length > 32) {
     const err = document.getElementById('profileError');
     err.textContent = 'Username must be 32 characters or less.';
-    err.classList.add('show');
-    return;
+    err.classList.add('show'); return;
   }
   document.getElementById('profileError').classList.remove('show');
   try {
-    // Update Firebase Auth display name
     await fb.updateProfile(user, { displayName: newName });
-    // Update Firestore
     const ref = fb.doc(fb.db, 'users', user.uid);
     await fb.updateDoc(ref, { username: newName });
     window.__currentUser = user;
@@ -1589,22 +1676,18 @@ function clearHash() {
 async function handleHashChange() {
   if (_suppressHashChange) return;
   const hash = location.hash;
-
   if (!hash || hash === '#' || hash === '#/' || hash === '#home') {
     if (document.getElementById('watch-view').style.display === 'block') {
       _internalShowHome();
     }
     return;
   }
-
-  // GitHub Pages 404 redirect: #/404?path=...
   const notFoundMatch = hash.match(/^#\/404/);
   if (notFoundMatch) {
     const params = new URLSearchParams(hash.split('?')[1] || '');
     show404(params.get('path') || hash);
     return;
   }
-
   const watchMatch = hash.match(/^#\/watch\/(\d+)\/(\d+)$/);
   if (watchMatch) {
     const animeId = parseInt(watchMatch[1]);
@@ -1617,16 +1700,11 @@ async function handleHashChange() {
           _suppressHashChange = true;
           openWatch(data.Media, ep);
           setTimeout(() => { _suppressHashChange = false; }, 100);
-        } else {
-          show404(hash);
-        }
-      } catch(e) {
-        show404(hash);
-      }
+        } else { show404(hash); }
+      } catch(e) { show404(hash); }
     }
     return;
   }
-
   show404(hash);
 }
 
@@ -1845,7 +1923,6 @@ function switchServer(server) {
     document.getElementById(id)?.classList.remove('active');
   });
   document.getElementById('srv-' + server)?.classList.add('active');
-
   if (server === 'anistream') {
     document.getElementById('dubToggle').style.display = 'none';
     if (currentAnime) loadAnistreamPlayer(currentAnime, currentEp);
@@ -2109,7 +2186,6 @@ async function postComment(key) {
     });
     ta.value = '';
     showToast('Comment posted!', 'success');
-    // Increment comment count in user profile
     try {
       const ref = fb.doc(fb.db, 'users', user.uid);
       await fb.updateDoc(ref, { commentCount: fb.increment(1) });
@@ -2261,7 +2337,6 @@ window.updateAuthUI = function(user) {
         </div>
       </div>`;
 
-    // Load quick stats for dropdown
     getUserProfile().then(profile => {
       if (profile) {
         const dw = document.getElementById('dropdownWatched');
@@ -2293,12 +2368,9 @@ function closeProfileDropdown() {
   if (dd) dd.classList.remove('open');
 }
 
-// Close dropdown when clicking outside
 document.addEventListener('click', (e) => {
   const wrap = document.getElementById('profileDropdownWrap');
-  if (wrap && !wrap.contains(e.target)) {
-    closeProfileDropdown();
-  }
+  if (wrap && !wrap.contains(e.target)) { closeProfileDropdown(); }
 });
 
 async function doSignOut() {
@@ -2386,13 +2458,11 @@ function timeAgo(d) {
 (async () => {
   renderHistory();
   showDailyBanner();
-
   await Promise.all([
     fetchTrending().then(d=>setHero(d.Page.media)),
     loadHome(false),
     loadSidebar()
   ]);
-
   await handleHashChange();
 })();
 </script>
