@@ -1495,11 +1495,10 @@ function cacheGet(key) {
 }
 
 async function gql(query, vars={}) {
-  const r = await fetch(AL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query, variables: vars })
-  });
+  // Use GET with query params to avoid WAF blocking POST requests
+  const params = new URLSearchParams({ query });
+  if (vars && Object.keys(vars).length) params.set('variables', JSON.stringify(vars));
+  const r = await fetch(AL + '?' + params.toString());
   if (!r.ok) throw new Error('AniList proxy HTTP ' + r.status);
   const json = await r.json();
   if (json.errors) throw new Error(json.errors[0]?.message || 'AniList error');
