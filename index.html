@@ -933,6 +933,7 @@ nav {
   padding: 2.5rem 1.5rem 1.5rem;
   display: flex; flex-direction: column; align-items: center;
   text-align: center; gap: 1rem; cursor: pointer;
+  text-decoration: none; color: inherit;
 }
 .popup-ad-icon { font-size: 2.4rem; line-height: 1; }
 .popup-ad-title {
@@ -3232,16 +3233,25 @@ function timeAgo(d) {
     }
   ];
 
+  const RESET_INTERVAL = 30 * 60 * 1000; // reset counter every 30 mins
+
   function getCardCount() { return parseInt(sessionStorage.getItem(CARD_KEY) || '0', 10); }
   function incCardCount() {
     sessionStorage.setItem(CARD_KEY, String(getCardCount() + 1));
     sessionStorage.setItem(LAST_CARD_KEY, String(Date.now()));
+  }
+  function resetCardCount() {
+    sessionStorage.setItem(CARD_KEY, '0');
+    sessionStorage.setItem(LAST_CARD_KEY, '0');
   }
   function canShowCard() {
     if (getCardCount() >= MAX_CARDS) return false;
     const last = parseInt(sessionStorage.getItem(LAST_CARD_KEY) || '0', 10);
     return Date.now() - last >= MIN_GAP;
   }
+
+  // Reset the counter every 30 minutes so the cycle starts again
+  setInterval(() => { resetCardCount(); }, RESET_INTERVAL);
 
   function showCardAd() {
     if (!canShowCard()) return;
@@ -3258,15 +3268,15 @@ function timeAgo(d) {
         <button class="popup-ad-close" id="popupCloseBtn" disabled>
           <span class="popup-ad-close-timer" id="popupTimer">${timeLeft}</span>
         </button>
-        <div class="popup-ad-content" id="popupClickArea">
+        <a class="popup-ad-content" id="popupClickArea" href="${ad.url}" target="_blank" rel="noopener noreferrer">
           <div class="popup-ad-icon">${ad.icon}</div>
           <div class="popup-ad-title">${ad.title}</div>
           <div class="popup-ad-sub">${ad.sub}</div>
-          <button class="popup-ad-cta">
+          <div class="popup-ad-cta">
             ${ad.cta}
             <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 11L11 2M11 2H5M11 2v6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </button>
-        </div>
+          </div>
+        </a>
       </div>`;
 
     document.body.appendChild(overlay);
@@ -3292,20 +3302,17 @@ function timeAgo(d) {
       setTimeout(() => overlay.remove(), 200);
     }
 
-    closeBtn.addEventListener('click', (e) => { e.stopPropagation(); dismiss(); });
-    overlay.querySelector('#popupClickArea').addEventListener('click', () => {
-      window.open(ad.url, '_blank', 'noopener,noreferrer');
-      dismiss();
-    });
+    closeBtn.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); dismiss(); });
+    overlay.querySelector('#popupClickArea').addEventListener('click', () => { dismiss(); });
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay && !closeBtn.disabled) dismiss();
     });
   }
 
-  // Trigger 1: 45s after load (give the user time to settle in)
+  // Trigger 1: 45s after load
   setTimeout(() => { if (canShowCard()) showCardAd(); }, 45000);
 
-  // Trigger 2: when user starts watching — 20s after they hit play (engaged, not bouncing)
+  // Trigger 2: 20s after user starts watching an episode
   window.addEventListener('hashchange', () => {
     if (location.hash.startsWith('#/watch/')) {
       setTimeout(() => { if (canShowCard()) showCardAd(); }, 20000);
