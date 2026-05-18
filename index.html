@@ -3250,8 +3250,11 @@ function timeAgo(d) {
     return Date.now() - last >= MIN_GAP;
   }
 
-  // Reset the counter every 30 minutes so the cycle starts again
-  setInterval(() => { resetCardCount(); }, RESET_INTERVAL);
+  // Reset the counter every 30 minutes so the cycle starts again,
+  // but only if no card is currently on screen
+  setInterval(() => {
+    if (!document.querySelector('.popup-ad-overlay')) resetCardCount();
+  }, RESET_INTERVAL);
 
   function showCardAd() {
     if (!canShowCard()) return;
