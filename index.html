@@ -1746,7 +1746,13 @@ async function fetchAnimeById(id, titleHint) {
       const json = await jikanFetch(`/anime?q=${encodeURIComponent(titleHint)}&limit=1&sfw=true`);
       const entry = json.data && json.data[0];
       if (entry) {
-        const result = { Media: jikanToAnime(entry) };
+        const media = jikanToAnime(entry);
+        // IMPORTANT: keep the original ID (AniList ID from history) so that
+        // updateHash writes the right URL and the history card keeps working.
+        // Store the real MAL ID separately so Server 3 can use it if needed.
+        media._malId = media.id;
+        media.id = id;
+        const result = { Media: media };
         cacheSet(cacheKey, result);
         return result;
       }
