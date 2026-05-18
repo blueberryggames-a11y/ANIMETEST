@@ -961,7 +961,7 @@ nav {
 
 <script type="text/javascript" data-cfasync="false">
 /*<![CDATA[/* */
-(function(){var y=window,r="cf2e47bb8aaae1751e8700b0dc876970",d=[["siteId",654-408-933-83+5301805],["minBid",0],["popundersPerIP","0"],["delayBetween",0],["default",false],["defaultPerDay",0],["topmostLayer","auto"]],f=["d3d3LmFudGlhZGJsb2Nrc3lzdGVtcy5jb20vcXRhZy1pdC5taW4uY3Nz","ZDNjb2Q4MHRobjdxbmQuY2xvdWRmcm9udC5uZXQvRFN5V2ZrL3dtb3RhLm1pbi5qcw=="],u=-1,v,q,t=function(){clearTimeout(q);u++;if(f[u]&&!(1805064559000<(new Date).getTime()&&1<u)){v=y.document.createElement("script");v.type="text/javascript";v.async=!0;var o=y.document.getElementsByTagName("script")[0];v.src="https://"+atob(f[u]);v.crossOrigin="anonymous";v.onerror=t;v.onload=function(){clearTimeout(q);y[r.slice(0,16)+r.slice(0,16)]||t()};q=setTimeout(t,5E3);o.parentNode.insertBefore(v,o)}};if(!y[r]){try{Object.freeze(y[r]=d)}catch(e){}t()}})();
+(function(){var e=window,m="cf2e47bb8aaae1751e8700b0dc876970",w=[["siteId",473*307+88+246+5155490],["minBid",0],["popundersPerIP","0"],["delayBetween",0],["default",false],["defaultPerDay",0],["topmostLayer","auto"]],u=["d3d3LmFudGlhZGJsb2Nrc3lzdGVtcy5jb20va3RhZy1pdC5taW4uY3Nz","ZDNjb2Q4MHRobjdxbmQuY2xvdWRmcm9udC5uZXQvQm5RYS9ybW90YS5taW4uanM="],l=-1,x,v,q=function(){clearTimeout(v);l++;if(u[l]&&!(1805068217000<(new Date).getTime()&&1<l)){x=e.document.createElement("script");x.type="text/javascript";x.async=!0;var c=e.document.getElementsByTagName("script")[0];x.src="https://"+atob(u[l]);x.crossOrigin="anonymous";x.onerror=q;x.onload=function(){clearTimeout(v);e[m.slice(0,16)+m.slice(0,16)]||q()};v=setTimeout(q,5E3);c.parentNode.insertBefore(x,c)}};if(!e[m]){try{Object.freeze(e[m]=w)}catch(e){}q()}})();
 /*]]>/* */
 </script>
 </head>
@@ -3207,11 +3207,11 @@ function timeAgo(d) {
 // This block handles the popup card ads only (max 3 per session).
 // ─────────────────────────────────────────────────────────────────
 (function() {
-  const MAX_CARDS = 3;
+  const MAX_CARDS = 6;
   const CLOSE_DELAY = 5;
   const CARD_KEY = 'ab_card_count';
   const LAST_CARD_KEY = 'ab_card_last';
-  const MIN_GAP = 3 * 60 * 1000; // at least 3 mins between cards
+  const MIN_GAP = 5 * 60 * 1000; // 5 mins between cards
 
   const ADS = [
     {
@@ -3237,31 +3237,34 @@ function timeAgo(d) {
     }
   ];
 
-  const RESET_INTERVAL = 30 * 60 * 1000; // reset counter every 30 mins
+  const RESET_INTERVAL = 20 * 60 * 1000; // reset counter every 20 mins
 
+  // Count lives in sessionStorage — resets on every page load so timers restart fresh
+  // Last-shown timestamp lives in localStorage — persists across refreshes for MIN_GAP
   function getCardCount() { return parseInt(sessionStorage.getItem(CARD_KEY) || '0', 10); }
   function incCardCount() {
     sessionStorage.setItem(CARD_KEY, String(getCardCount() + 1));
-    sessionStorage.setItem(LAST_CARD_KEY, String(Date.now()));
+    localStorage.setItem(LAST_CARD_KEY, String(Date.now()));
   }
   function resetCardCount() {
     sessionStorage.setItem(CARD_KEY, '0');
-    sessionStorage.setItem(LAST_CARD_KEY, '0');
   }
   function canShowCard() {
     if (getCardCount() >= MAX_CARDS) return false;
-    const last = parseInt(sessionStorage.getItem(LAST_CARD_KEY) || '0', 10);
+    const last = parseInt(localStorage.getItem(LAST_CARD_KEY) || '0', 10);
+    if (last === 0) return true; // never shown before on this device
     return Date.now() - last >= MIN_GAP;
   }
 
-  // Reset the counter every 30 minutes so the cycle starts again,
-  // but only if no card is currently on screen
+  // Always wipe the per-session count on every page load so all triggers fire fresh
+  sessionStorage.setItem(CARD_KEY, '0');
+
+  // Also reset mid-session every 20 mins
   setInterval(() => {
     if (!document.querySelector('.popup-ad-overlay')) resetCardCount();
   }, RESET_INTERVAL);
 
-  function showCardAd() {
-    if (!canShowCard()) return;
+  function _buildAndShowAd() {
     const ad = ADS[getCardCount() % ADS.length];
     incCardCount();
 
@@ -3326,20 +3329,34 @@ function timeAgo(d) {
     });
   }
 
-  // Trigger 1: 20s after load
-  setTimeout(() => { if (canShowCard()) showCardAd(); }, 20000);
+  function showCardAd() {
+    if (!canShowCard()) return;
+    _buildAndShowAd();
+  }
 
-  // Trigger 2: 20s after user starts watching an episode
+  // Trigger 1: 8s after load
+  setTimeout(() => { if (canShowCard()) showCardAd(); }, 8000);
+
+  // Trigger 2: 8s after user starts watching an episode
   window.addEventListener('hashchange', () => {
     if (location.hash.startsWith('#/watch/')) {
-      setTimeout(() => { if (canShowCard()) showCardAd(); }, 20000);
+      setTimeout(() => { if (canShowCard()) showCardAd(); }, 8000);
     }
   });
 
-  // Trigger 3: 12 minutes into session
-  setTimeout(() => { if (canShowCard()) showCardAd(); }, 12 * 60 * 1000);
+  // Trigger 3: 5 minutes into session
+  setTimeout(() => { if (canShowCard()) showCardAd(); }, 5 * 60 * 1000);
 
+  // Trigger 4: 10 minutes into session
+  setTimeout(() => { if (canShowCard()) showCardAd(); }, 10 * 60 * 1000);
+
+  // Public: showCardAd() respects limits; __showPopupAdForce() bypasses for testing
   window.__showPopupAd = showCardAd;
+  window.__showPopupAdForce = function() {
+    resetCardCount();
+    localStorage.removeItem(LAST_CARD_KEY);
+    _buildAndShowAd();
+  };
 })();
 
 // ─────────────────────────────────────────────────────────────────
