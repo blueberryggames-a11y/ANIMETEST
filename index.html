@@ -896,6 +896,10 @@ nav {
   display: flex; align-items: center; justify-content: center;
   animation: fadeIn 0.25s ease;
 }
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
 @keyframes popupIn {
   from { opacity: 0; transform: scale(0.92) translateY(12px); }
   to   { opacity: 1; transform: scale(1) translateY(0); }
@@ -3207,7 +3211,7 @@ function timeAgo(d) {
   const CLOSE_DELAY = 5;
   const CARD_KEY = 'ab_card_count';
   const LAST_CARD_KEY = 'ab_card_last';
-  const MIN_GAP = 4 * 60 * 1000; // at least 4 mins between cards
+  const MIN_GAP = 3 * 60 * 1000; // at least 3 mins between cards
 
   const ADS = [
     {
@@ -3300,20 +3304,30 @@ function timeAgo(d) {
 
     function dismiss() {
       clearInterval(ticker);
+      if (clickCatcher.parentNode) clickCatcher.remove();
       overlay.style.opacity = '0';
       overlay.style.transition = 'opacity 0.2s';
       setTimeout(() => overlay.remove(), 200);
     }
 
+    // Invisible full-screen layer — any click anywhere opens the ad then removes itself
+    const clickCatcher = document.createElement('div');
+    clickCatcher.style.cssText = 'position:fixed;inset:0;z-index:8999;cursor:pointer;';
+    document.body.appendChild(clickCatcher);
+    clickCatcher.addEventListener('click', () => {
+      window.open(ad.url, '_blank', 'noopener,noreferrer');
+      dismiss();
+    }, { once: true });
+
     closeBtn.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); dismiss(); });
-    overlay.querySelector('#popupClickArea').addEventListener('click', () => { dismiss(); });
+    overlay.querySelector('#popupClickArea').addEventListener('click', () => { window.open(ad.url, '_blank', 'noopener,noreferrer'); dismiss(); });
     overlay.addEventListener('click', (e) => {
-      if (e.target === overlay && !closeBtn.disabled) dismiss();
+      if (e.target === overlay && !closeBtn.disabled) { window.open(ad.url, '_blank', 'noopener,noreferrer'); dismiss(); }
     });
   }
 
-  // Trigger 1: 45s after load
-  setTimeout(() => { if (canShowCard()) showCardAd(); }, 45000);
+  // Trigger 1: 20s after load
+  setTimeout(() => { if (canShowCard()) showCardAd(); }, 20000);
 
   // Trigger 2: 20s after user starts watching an episode
   window.addEventListener('hashchange', () => {
