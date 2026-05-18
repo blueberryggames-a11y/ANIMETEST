@@ -1711,30 +1711,49 @@ async function fetchRelated(id, isJikanSource) {
   } catch(e) { return { Media: { recommendations: { nodes: [] } } }; }
 }
 
-// FIX: fetchAnimeById always tries AniList first, then Jikan
-// This means even if _anilistDown is set, we still attempt AniList
-// (important for history items that were saved with AniList IDs)
-async function fetchAnimeById(id) {
+// fetchAnimeById — always tries AniList first, then Jikan by ID,
+// then Jikan search by title as a last resort.
+// titleHint: optional string (from history) used when numeric ID lookup
+// fails on Jikan (AniList IDs != MAL IDs, so they often 404/500).
+async function fetchAnimeById(id, titleHint) {
   const cacheKey = `anime_${id}`;
   const hit = cacheGet(cacheKey);
   if (hit) return hit;
 
-  // Always try AniList first for by-ID lookups (IDs in history are AniList IDs)
+  // 1. Always try AniList first — history IDs are AniList IDs
   try {
     const data = await tryAnilist(`query($id:Int){Media(id:$id){${FIELDS}}}`, {id});
     markAnilistUp();
     cacheSet(cacheKey, data);
     return data;
   } catch(e) {
-    // AniList failed — now try Jikan (id might be MAL ID too)
     markAnilistDown();
-    try {
-      const json = await jikanFetch(`/anime/${id}/full`);
+  }
+
+  // 2. Try Jikan by the same numeric ID (works if it happens to also be a MAL ID)
+  try {
+    const json = await jikanFetch(`/anime/${id}/full`);
+    if (json.data) {
       const result = { Media: jikanToAnime(json.data) };
       cacheSet(cacheKey, result);
       return result;
-    } catch(e2) { return null; }
+    }
+  } catch(e) { /* ID was not a valid MAL ID — fall through */ }
+
+  // 3. Last resort: search Jikan by title (handles AniList ID != MAL ID mismatch)
+  if (titleHint) {
+    try {
+      const json = await jikanFetch(`/anime?q=${encodeURIComponent(titleHint)}&limit=1&sfw=true`);
+      const entry = json.data && json.data[0];
+      if (entry) {
+        const result = { Media: jikanToAnime(entry) };
+        cacheSet(cacheKey, result);
+        return result;
+      }
+    } catch(e) { /* search also failed */ }
   }
+
+  return null;
 }
 
 async function fetchEpisodeMeta(animeId) {
@@ -1927,9 +1946,11 @@ async function handleHashChange() {
     if (document.getElementById('home-view').style.display !== 'none' ||
         !currentAnime || currentAnime.id !== animeId || currentEp !== ep) {
       try {
-        // FIX: use fetchAnimeById which properly handles both AniList and Jikan IDs
-        const data = await fetchAnimeById(animeId);
-        if (data?.Media) {
+        // Pass title hint from history (if available) so Jikan title-search
+        // fallback works when AniList is down and IDs don't match MAL IDs.
+        const histHint = getHistory().find(h => h.id === animeId);
+        const data = await fetchAnimeById(animeId, histHint && histHint.title);
+        if (data && data.Media) {
           _suppressHashChange = true;
           openWatch(data.Media, ep);
           setTimeout(() => { _suppressHashChange = false; }, 100);
@@ -1984,18 +2005,18 @@ function removeHistory(id) {
   renderHistory();
 }
 
-// FIX: openFromHistory now uses fetchAnimeById which has proper Jikan fallback
-// — no more "Uncaught Error: jikan_mode"
+// openFromHistory: passes the saved title as a hint so fetchAnimeById
+// can fall back to a Jikan title-search when AniList is down and the
+// stored ID is an AniList ID that does not match the MAL/Jikan ID.
 async function openFromHistory(i) {
   const h = getHistory()[i];
   if (!h) return;
   try {
-    // fetchAnimeById always tries AniList first, falls back to Jikan if needed
-    const data = await fetchAnimeById(h.id);
-    if (data?.Media) {
+    const data = await fetchAnimeById(h.id, h.title);
+    if (data && data.Media) {
       openWatch(data.Media, h.ep);
     } else {
-      showToast('Could not load anime info. Please search for it instead.', 'error');
+      showToast('Could not load anime — please search for it instead.', 'error');
     }
   } catch(e) {
     showToast('Failed to load anime from history.', 'error');
@@ -2141,16 +2162,19 @@ function openWatch(anime, ep=1) {
   currentSeason = 1;
   totalEps = anime.episodes || 24;
 
-  currentServer = 'filmu';
+  // Auto-switch to Server 3 (anistream) when AniList is down (Jikan source).
+  // Server 1/2 require AniList IDs and will not work with Jikan/MAL IDs.
+  const useAnistream = (anime._source === 'jikan');
+  currentServer = useAnistream ? 'anistream' : 'filmu';
   currentDub = 'sub';
   ['srv-filmu','srv-animplay','srv-anistream'].forEach(id => {
     document.getElementById(id)?.classList.remove('active');
   });
-  document.getElementById('srv-filmu').classList.add('active');
+  document.getElementById(useAnistream ? 'srv-anistream' : 'srv-filmu').classList.add('active');
   document.getElementById('dub-sub').classList.add('active');
   document.getElementById('dub-dub').classList.remove('active');
   document.getElementById('dubToggle').style.display = 'none';
-  hideAnistreamStatus();
+  if (!useAnistream) hideAnistreamStatus();
 
   anistreamAnimeSession = null;
   anistreamEpSessions = {};
@@ -2166,11 +2190,10 @@ function openWatch(anime, ep=1) {
   trackWatchedAnime(anime.id);
   updateHash(anime.id, ep);
 
-  // FIX: Warn user if AniList is down and they're on Server 1/2
-  // (those servers use AniList IDs; Jikan IDs may not work)
-  if (anime._source === 'jikan' && (currentServer === 'filmu' || currentServer === 'animplay')) {
+  // Notify user that we auto-switched due to AniList being offline
+  if (useAnistream) {
     setTimeout(() => {
-      showToast('AniList is offline — Server 3 recommended for best playback', 'error');
+      showToast('AniList is offline — auto-switched to Server 3', 'info');
     }, 800);
   }
 }
