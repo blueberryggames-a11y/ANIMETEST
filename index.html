@@ -1478,7 +1478,9 @@ function hideAnistreamStatus() {
 }
 
 // ── AniList ───────────────────────────────────────────────────────
-const AL = 'https://graphql.anilist.co';
+const AL_DIRECT = 'https://graphql.anilist.co';
+const AL_PROXY  = 'https://corsproxy.io/?' + encodeURIComponent(AL_DIRECT);
+const AL = AL_PROXY;
 const FIELDS = `id title{romaji english native} coverImage{large extraLarge} bannerImage description(asHtml:false) episodes averageScore genres status startDate{year} format studios{nodes{name}} nextAiringEpisode{episode}`;
 
 // ── Cache (1-hour TTL) ────────────────────────────────────────────
@@ -1495,8 +1497,18 @@ function cacheGet(key) {
 }
 
 async function gql(query, vars={}) {
-  const r = await fetch(AL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({query, variables:vars}) });
-  return (await r.json()).data;
+  const r = await fetch(AL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-requested-with': 'XMLHttpRequest'
+    },
+    body: JSON.stringify({ query, variables: vars })
+  });
+  if (!r.ok) throw new Error('AniList HTTP ' + r.status);
+  const json = await r.json();
+  if (json.errors) throw new Error(json.errors[0]?.message || 'AniList error');
+  return json.data;
 }
 async function cachedGql(cacheKey, query, vars={}) {
   const hit = cacheGet(cacheKey);
