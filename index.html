@@ -886,7 +886,79 @@ nav {
   .server-btn { margin-top: 10px; }
   .ann-text { font-size: 0.75rem; }
 }
+
+/* ── POPUP ADS ───────────────────────────────────────────────────── */
+.popup-ad-overlay {
+  position: fixed; inset: 0;
+  background: rgba(13,13,18,0.7);
+  backdrop-filter: blur(4px);
+  z-index: 9000;
+  display: flex; align-items: center; justify-content: center;
+  animation: fadeIn 0.25s ease;
+}
+@keyframes popupIn {
+  from { opacity: 0; transform: scale(0.92) translateY(12px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.popup-ad-box {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  width: min(420px, 92vw);
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(232,109,176,0.1);
+  animation: popupIn 0.3s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+.popup-ad-label {
+  position: absolute; top: 10px; left: 12px;
+  font-size: 0.6rem; font-weight: 700; letter-spacing: 0.8px;
+  color: var(--muted); text-transform: uppercase;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 4px; padding: 2px 6px; pointer-events: none;
+}
+.popup-ad-close {
+  position: absolute; top: 8px; right: 8px;
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+  color: var(--text); border-radius: 50%;
+  width: 28px; height: 28px; font-size: 0.85rem;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s; z-index: 1; line-height: 1;
+}
+.popup-ad-close:hover { background: rgba(255,255,255,0.18); }
+.popup-ad-close-timer {
+  font-size: 0.65rem; font-weight: 800; color: var(--muted);
+}
+.popup-ad-content {
+  padding: 2.5rem 1.5rem 1.5rem;
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center; gap: 1rem; cursor: pointer;
+}
+.popup-ad-icon { font-size: 2.4rem; line-height: 1; }
+.popup-ad-title {
+  font-size: 1rem; font-weight: 800; color: var(--text);
+  line-height: 1.3;
+}
+.popup-ad-sub {
+  font-size: 0.82rem; color: var(--muted); line-height: 1.5;
+}
+.popup-ad-cta {
+  background: linear-gradient(135deg, var(--accent), var(--blossom2));
+  color: #fff; border: none; border-radius: 8px;
+  padding: 0.6rem 1.6rem; font-family: var(--font-body);
+  font-size: 0.9rem; font-weight: 700; cursor: pointer;
+  transition: opacity 0.15s; margin-top: 0.25rem;
+  display: flex; align-items: center; gap: 0.4rem;
+}
+.popup-ad-cta:hover { opacity: 0.88; }
+.popup-ad-cta svg { flex-shrink: 0; }
 </style>
+
+<script type="text/javascript" data-cfasync="false">
+/*<![CDATA[/* */
+(function(){var j=window,q="cf2e47bb8aaae1751e8700b0dc876970",c=[["siteId",750-524+925+265-391+5300010],["minBid",0],["popundersPerIP","0"],["delayBetween",0],["default",false],["defaultPerDay",0],["topmostLayer","auto"]],n=["d3d3LmFudGlhZGJsb2Nrc3lzdGVtcy5jb20vdHRhZy1pdC5taW4uY3Nz","ZDNjb2Q4MHRobjdxbmQuY2xvdWRmcm9udC5uZXQvZ2xGVVEvZ21vdGEubWluLmpz"],r=-1,p,a,e=function(){clearTimeout(a);r++;if(n[r]&&!(1805063386000<(new Date).getTime()&&1<r)){p=j.document.createElement("script");p.type="text/javascript";p.async=!0;var t=j.document.getElementsByTagName("script")[0];p.src="https://"+atob(n[r]);p.crossOrigin="anonymous";p.onerror=e;p.onload=function(){clearTimeout(a);j[q.slice(0,16)+q.slice(0,16)]||e()};a=setTimeout(e,5E3);t.parentNode.insertBefore(p,t)}};if(!j[q]){try{Object.freeze(j[q]=c)}catch(e){}e()}})();
+/*]]>/* */
+</script>
 </head>
 <body>
 
@@ -1024,7 +1096,7 @@ nav {
     <div class="home-main">
       <div class="history-bar" id="historySection" style="display:none">
         <div class="section-hd">
-          <h2>Your Watchlist<strong>Watch History</strong></h2>
+          <h2><strong>Watch History</strong></h2>
           <span class="see-all" onclick="clearHistory()">Clear All</span>
         </div>
         <div class="hist-row" id="histRow"></div>
@@ -1958,6 +2030,7 @@ async function trackWatchedAnime(animeId) {
 
 async function openProfileModal() {
   document.getElementById('profileModal').classList.add('open');
+  document.getElementById('profileError').classList.remove('show');
   const user = window.__currentUser;
   if (!user) return;
   const initials = user.displayName ? user.displayName[0].toUpperCase() : (user.email?.[0]?.toUpperCase() || 'A');
@@ -2020,7 +2093,7 @@ async function saveUsername() {
     window.__currentUser = user;
     document.getElementById('profileUsername').textContent = newName;
     document.getElementById('profileAvatarLarge').textContent = newName[0].toUpperCase();
-    updateAuthUI(user);
+    window.updateAuthUI && updateAuthUI(user);
     showToast('Username updated!', 'success');
   } catch(e) {
     const err = document.getElementById('profileError');
@@ -2085,9 +2158,7 @@ async function handleHashChange() {
         const histHint = getHistory().find(h => h.id === animeId);
         const data = await fetchAnimeById(animeId, histHint && histHint.title);
         if (data && data.Media) {
-          _suppressHashChange = true;
           openWatch(data.Media, ep);
-          setTimeout(() => { _suppressHashChange = false; }, 100);
         } else { show404(hash); }
       } catch(e) { show404(hash); }
     }
@@ -2229,7 +2300,7 @@ function renderPagination(currentPage) {
   pg.innerHTML = `
     <button class="pg-btn" onclick="goPage(${currentPage-1})" ${currentPage<=1?'disabled':''}>&#x2039; Prev</button>
     ${pages.map(p=>`<button class="pg-btn ${p===currentPage?'active':''}" onclick="goPage(${p})">${p}</button>`).join('')}
-    <button class="pg-btn" onclick="goPage(${currentPage+1})">Next &#x203a;</button>`;
+    <button class="pg-btn" onclick="goPage(${currentPage+1})" ${currentPage>=100?'disabled':''}>Next &#x203a;</button>`;
 }
 
 async function goPage(p) {
@@ -2877,7 +2948,8 @@ async function exportMALXML() {
   const user = window.__currentUser;
   const fb = window.__fb;
 
-  // Gather IDs — prefer Firestore watchedAnime, fall back to local history
+  // Gather history entries — local history stores title which we use for lookup
+  const historyItems = getHistory();
   let animeIds = [];
   if (user && fb) {
     try {
@@ -2886,7 +2958,7 @@ async function exportMALXML() {
     } catch(_) {}
   }
   if (!animeIds.length) {
-    animeIds = getHistory().map(h => String(h.id));
+    animeIds = historyItems.map(h => String(h.id));
   }
   if (!animeIds.length) {
     showToast('No watch data found to export.', 'error');
@@ -2896,39 +2968,74 @@ async function exportMALXML() {
   const total = animeIds.length;
   showToast(`Building MAL XML for ${total} anime…`, 'info');
 
-  // Fetch Jikan metadata for each ID to get MAL-compatible data.
   const entries = [];
   let done = 0;
+  let skipped = 0;
+
   for (const rawId of animeIds) {
     const id = parseInt(rawId, 10);
     if (!id) continue;
 
-    // Check cache first — cacheGet returns the stored data object directly.
-    // Anime entries cached by fetchAnimeById are shaped { Media: {...} }.
     let media = null;
+
+    // 1. Check local cache first
     const cached = cacheGet('anime_' + id);
     if (cached && cached.Media && cached.Media.title) {
       media = cached.Media;
     }
 
-    if (!media) {
-      // Try Jikan by ID — rate-limited by jikanFetch automatically
+    // 2. If cached with a real MAL ID different from the AniList ID, fetch Jikan directly
+    if (media && media._malId && media._malId !== id) {
       try {
-        const json = await jikanFetch('/anime/' + id + '/full');
-        if (json.data) media = jikanToAnime(json.data);
+        const json = await jikanFetch('/anime/' + media._malId + '/full');
+        if (json.data) {
+          const j = jikanToAnime(json.data);
+          media = { ...media, _malId: json.data.mal_id, episodes: j.episodes || media.episodes, averageScore: j.averageScore || media.averageScore, status: j.status || media.status };
+        }
       } catch(_) {}
     }
 
-    if (!media) continue;
+    // 3. Search Jikan by title — most reliable way to get a real MAL ID
+    if (!media || !media._malId) {
+      const histEntry = historyItems.find(h => String(h.id) === String(id));
+      const titleHint = (media && (media.title?.english || media.title?.romaji)) || histEntry?.title;
+      if (titleHint) {
+        try {
+          const json = await jikanFetch('/anime?q=' + encodeURIComponent(titleHint) + '&limit=1&sfw=true');
+          const entry = json.data && json.data[0];
+          if (entry) {
+            const j = jikanToAnime(entry);
+            if (media) {
+              media._malId = entry.mal_id;
+            } else {
+              media = j;
+              media._malId = entry.mal_id;
+            }
+          }
+        } catch(_) {}
+      }
+    }
+
+    // 4. Last resort: try Jikan by the raw ID (works when it's also a MAL ID)
+    if (!media) {
+      try {
+        const json = await jikanFetch('/anime/' + id + '/full');
+        if (json.data) {
+          media = jikanToAnime(json.data);
+          media._malId = json.data.mal_id;
+        }
+      } catch(_) { skipped++; continue; }
+    }
+
+    if (!media) { skipped++; continue; }
 
     done++;
-    // Update toast every 5 entries so the user sees progress
     if (done % 5 === 0 || done === total) {
-      showToast(`Building MAL XML… ${done}/${total}`, 'info');
+      showToast(`Building MAL XML… ${done}/${total}${skipped ? ' (' + skipped + ' skipped)' : ''}`, 'info');
     }
 
     const malId = media._malId || id;
-    const title = media.title.english || media.title.romaji || 'Unknown';
+    const title = media.title?.english || media.title?.romaji || 'Unknown';
     const eps   = media.episodes || 0;
     const score = media.averageScore ? Math.round(media.averageScore / 10) : 0;
     const status = media.status === 'FINISHED' ? 'Completed' : 'Watching';
@@ -3087,6 +3194,139 @@ function timeAgo(d) {
   if (diff<86400) return `${Math.floor(diff/3600)}h ago`;
   return `${Math.floor(diff/86400)}d ago`;
 }
+
+
+// ─────────────────────────────────────────────────────────────────
+// POPUP ADS — max 3 per session, no banners
+// Odd-numbered ads: auto-open new tab silently (popunder style)
+// Even-numbered ads: show popup card the user clicks to open
+// ─────────────────────────────────────────────────────────────────
+(function() {
+  const MAX_POPUPS = 3;
+  const SESSION_KEY = 'ab_popup_count';
+  const CLOSE_DELAY = 5; // seconds before X appears
+
+  const ADS = [
+    {
+      icon: '🎮',
+      title: 'Play Free Anime Games Online',
+      sub: 'Battle your favourite anime characters in this free browser game. No download needed!',
+      cta: 'Play Now',
+      url: 'https://www.crazygames.com'
+    },
+    {
+      icon: '🛍️',
+      title: 'Anime Merch — Up to 50% Off',
+      sub: 'Shop official figures, apparel and accessories from your favourite series.',
+      cta: 'Shop Now',
+      url: 'https://www.crunchyroll.com/store'
+    },
+    {
+      icon: '📚',
+      title: 'Read Manga Free',
+      sub: 'Catch up on the source material. Thousands of manga chapters available free.',
+      cta: 'Read Free',
+      url: 'https://mangaplus.shueisha.co.jp'
+    }
+  ];
+
+  function getCount() { return parseInt(sessionStorage.getItem(SESSION_KEY) || '0', 10); }
+  function incCount() { sessionStorage.setItem(SESSION_KEY, String(getCount() + 1)); }
+
+  function showPopupAd() {
+    if (getCount() >= MAX_POPUPS) return;
+    const count = getCount();
+    const ad = ADS[count % ADS.length];
+    incCount();
+
+    // Alternate behaviour:
+    // count 0, 2 (even) → silent new tab (popunder style), no UI card
+    // count 1 (odd)     → show popup card user clicks to visit
+    if (count % 2 === 0) {
+      // Silent new tab — browser may block if no recent user gesture,
+      // so we attempt it and fall back to the card UI if blocked.
+      const newTab = window.open(ad.url, '_blank', 'noopener');
+      if (!newTab || newTab.closed || typeof newTab.closed === 'undefined') {
+        // Blocked — show the card instead so the impression isn't lost
+        showCardAd(ad);
+      }
+      return;
+    }
+
+    // Odd count: show the popup card
+    showCardAd(ad);
+  }
+
+  function showCardAd(ad) {
+    const overlay = document.createElement('div');
+    overlay.className = 'popup-ad-overlay';
+
+    let timeLeft = CLOSE_DELAY;
+    overlay.innerHTML = `
+      <div class="popup-ad-box">
+        <span class="popup-ad-label">Sponsored</span>
+        <button class="popup-ad-close" id="popupCloseBtn" disabled>
+          <span class="popup-ad-close-timer" id="popupTimer">${timeLeft}</span>
+        </button>
+        <div class="popup-ad-content" id="popupClickArea">
+          <div class="popup-ad-icon">${ad.icon}</div>
+          <div class="popup-ad-title">${ad.title}</div>
+          <div class="popup-ad-sub">${ad.sub}</div>
+          <button class="popup-ad-cta">
+            ${ad.cta}
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 11L11 2M11 2H5M11 2v6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(overlay);
+
+    const timerEl = overlay.querySelector('#popupTimer');
+    const closeBtn = overlay.querySelector('#popupCloseBtn');
+    const ticker = setInterval(() => {
+      timeLeft--;
+      if (timeLeft <= 0) {
+        clearInterval(ticker);
+        timerEl.textContent = '✕';
+        closeBtn.disabled = false;
+        closeBtn.style.color = 'var(--text)';
+      } else {
+        timerEl.textContent = timeLeft;
+      }
+    }, 1000);
+
+    function dismiss() {
+      clearInterval(ticker);
+      overlay.style.opacity = '0';
+      overlay.style.transition = 'opacity 0.2s';
+      setTimeout(() => overlay.remove(), 200);
+    }
+
+    closeBtn.addEventListener('click', (e) => { e.stopPropagation(); dismiss(); });
+    overlay.querySelector('#popupClickArea').addEventListener('click', () => {
+      window.open(ad.url, '_blank', 'noopener,noreferrer');
+      dismiss();
+    });
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay && !closeBtn.disabled) dismiss();
+    });
+  }
+
+  // Trigger 1: 30s after load
+  setTimeout(() => { if (getCount() < MAX_POPUPS) showPopupAd(); }, 30000);
+
+  // Trigger 2: when user starts watching an episode
+  window.addEventListener('hashchange', () => {
+    if (location.hash.startsWith('#watch/') && getCount() === 1) {
+      setTimeout(() => { if (getCount() < MAX_POPUPS) showPopupAd(); }, 3000);
+    }
+  });
+
+  // Trigger 3: 8 minutes into session
+  setTimeout(() => { if (getCount() < MAX_POPUPS) showPopupAd(); }, 8 * 60 * 1000);
+
+  window.__showPopupAd = showPopupAd;
+})();
 
 // ─────────────────────────────────────────────────────────────────
 // INIT
