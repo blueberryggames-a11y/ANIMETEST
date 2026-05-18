@@ -2961,8 +2961,7 @@ async function exportMALXML() {
     <my_rewatching_ep>0</my_rewatching_ep>
     <my_last_updated>${Math.floor(Date.now()/1000)}</my_last_updated>
     <my_tags></my_tags>
-  </anime>`).join('
-');
+  </anime>`).join('\n');
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <myanimelist>
