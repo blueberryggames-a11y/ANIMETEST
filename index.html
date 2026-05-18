@@ -538,15 +538,6 @@ nav {
 }
 .btn-info:hover { background: rgba(255,255,255,0.18); }
 
-.btn-info-icon {
-  font-style: normal;
-  font-family: var(--font-body);
-  font-variant-emoji: text;
-  speak: never;
-  display: inline-block;
-  line-height: 1;
-}
-
 .hero-nav { position: absolute; bottom: 1.25rem; right: 1.5rem; z-index: 3; display: flex; align-items: center; gap: 0.5rem; }
 .hero-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.3); cursor: pointer; transition: all 0.2s; }
 .hero-dot.active { background: var(--accent); width: 20px; border-radius: 3px; }
@@ -1190,12 +1181,15 @@ nav {
 <div class="toast" id="toast"></div>
 
 <script>
-// ── PROVIDERS ─────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// PROVIDERS
+// ─────────────────────────────────────────────────────────────────
 const PROVIDERS = [
   {
     id: "filmu",
     name: "Server 1",
     supportsAudio: false,
+    // Server 1 uses AniList ID — if we only have a Jikan/MAL ID it may not work
     getUrl: (anilistId, season, episode, audio) => {
       return `https://embed.filmu.in/anime/${anilistId}/${season}/${episode}`;
     }
@@ -1204,6 +1198,7 @@ const PROVIDERS = [
     id: "animplay",
     name: "Server 2",
     supportsAudio: true,
+    // Server 2 also uses AniList ID
     getUrl: (anilistId, season, episode, audio = "sub") => {
       return `https://animeplay.cfd/stream/ani/${anilistId}/${episode}/${audio}`;
     }
@@ -1220,7 +1215,9 @@ function getProvider(id) {
   return PROVIDERS.find(p => p.id === id) || PROVIDERS[0];
 }
 
-// ── ANNOUNCEMENTS ─────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// ANNOUNCEMENTS
+// ─────────────────────────────────────────────────────────────────
 function initAnnouncements() {
   const fb = window.__fb;
   if (!fb) { setTimeout(initAnnouncements, 500); return; }
@@ -1240,9 +1237,7 @@ function initAnnouncements() {
     snap.forEach(doc => {
       const d = doc.data();
       if (!d.announcementtext) return;
-      // Skip if user dismissed this one this session
       if (sessionStorage.getItem('ann_dismissed_' + doc.id)) return;
-      // Check expiry
       const endsAt = d.endsAt?.toMillis ? d.endsAt.toMillis() : null;
       if (endsAt && endsAt < now) return;
       if (!found) found = { id: doc.id, text: d.announcementtext, endsAt };
@@ -1254,7 +1249,6 @@ function initAnnouncements() {
       activeDocId = found.id;
       textEl.textContent = found.text;
       bar.classList.add('show');
-      // Schedule auto-hide when endsAt arrives
       if (found.endsAt) {
         const remaining = found.endsAt - Date.now();
         if (remaining > 0) {
@@ -1271,7 +1265,6 @@ function initAnnouncements() {
       activeDocId = null;
     }
   }, () => {
-    // Permission error — just hide bar silently
     bar.classList.remove('show');
   });
 
@@ -1286,7 +1279,9 @@ function initAnnouncements() {
 }
 initAnnouncements();
 
-// ── DAILY STATUS BANNER ──────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// DAILY STATUS BANNER
+// ─────────────────────────────────────────────────────────────────
 const BANNER_KEY = 'ab_daily_banner_' + new Date().toDateString();
 
 function showDailyBanner() {
@@ -1305,7 +1300,9 @@ function dismissDailyBanner() {
   localStorage.setItem(BANNER_KEY, '1');
 }
 
-// ── ANISTREAM CONFIG ──────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// ANISTREAM CONFIG
+// ─────────────────────────────────────────────────────────────────
 const ANISTREAM_DEFAULT = 'https://myapi-psi-wheat.vercel.app';
 
 function getAnistreamBase() {
@@ -1477,15 +1474,25 @@ function hideAnistreamStatus() {
   document.getElementById('anistreamStatus').className = 'anistream-status';
 }
 
-// ── AniList ───────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// API: AniList + Jikan fallback
+//
+// FIX SUMMARY:
+// - _apiSource is now PER-REQUEST, not global-sticky.
+//   We always try AniList first with a short timeout.
+//   Only if AniList fails do we fall back to Jikan for that request.
+// - No more jikan_mode throw — every caller handles fallback inline.
+// - openFromHistory now uses fetchAnimeById (which has Jikan fallback)
+//   instead of calling gql() directly.
+// - History items store _source so we can show a warning about
+//   Server 1/2 compatibility when using Jikan IDs.
+// ─────────────────────────────────────────────────────────────────
 const AL = 'https://graphql.anilist.co';
 const FIELDS = `id title{romaji english native} coverImage{large extraLarge} bannerImage description(asHtml:false) episodes averageScore genres status startDate{year} format studios{nodes{name}} nextAiringEpisode{episode}`;
 
-// ── Jikan (MyAnimeList REST) — automatic fallback if AniList is down
 const JIKAN = 'https://api.jikan.moe/v4';
-let _apiSource = 'anilist'; // flips to 'jikan' automatically on failure
 
-// ── Cache (1-hour TTL) ────────────────────────────────────────────
+// Cache (1-hour TTL)
 const CACHE_TTL = 60 * 60 * 1000;
 function cacheSet(key, data) { try { localStorage.setItem('ab_cache_' + key, JSON.stringify({ ts: Date.now(), data })); } catch(e) {} }
 function cacheGet(key) {
@@ -1498,19 +1505,62 @@ function cacheGet(key) {
   } catch(e) { return null; }
 }
 
-// ── Deduplicate by id ─────────────────────────────────────────────
+// Deduplicate by id
 function dedup(arr) {
   const seen = new Set();
   return arr.filter(a => { if (!a || seen.has(a.id)) return false; seen.add(a.id); return true; });
 }
 
-// ── Jikan → AniList shape ─────────────────────────────────────────
+// Track AniList availability — reset every 5 minutes so we retry automatically
+let _anilistDown = false;
+let _anilistDownSince = 0;
+const ANILIST_RETRY_MS = 5 * 60 * 1000; // 5 minutes
+
+function isAnilistAvailable() {
+  if (!_anilistDown) return true;
+  if (Date.now() - _anilistDownSince > ANILIST_RETRY_MS) {
+    // Reset — try AniList again
+    _anilistDown = false;
+    return true;
+  }
+  return false;
+}
+
+function markAnilistDown() {
+  if (!_anilistDown) {
+    _anilistDown = true;
+    _anilistDownSince = Date.now();
+    console.warn('[AniBlossom] AniList appears to be down. Using Jikan fallback. Will retry in 5 minutes.');
+  }
+}
+
+function markAnilistUp() {
+  if (_anilistDown) {
+    _anilistDown = false;
+    console.info('[AniBlossom] AniList is back online.');
+  }
+}
+
+// Jikan rate-limit safe fetch (max 3 req/sec)
+let _jikanLast = 0;
+async function jikanFetch(path) {
+  const wait = 340 - (Date.now() - _jikanLast);
+  if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  _jikanLast = Date.now();
+  const r = await fetch(JIKAN + path);
+  if (!r.ok) throw new Error(`Jikan ${r.status}`);
+  return r.json();
+}
+
+// Jikan → AniList shape normalisation
 function jikanToAnime(a) {
   if (!a) return null;
   const statusMap = { 'Currently Airing':'RELEASING', 'Finished Airing':'FINISHED', 'Not yet aired':'NOT_YET_RELEASED' };
   const formatMap  = { 'TV':'TV', 'Movie':'MOVIE', 'OVA':'OVA', 'ONA':'ONA', 'Special':'SPECIAL', 'Music':'MUSIC' };
   return {
     id: a.mal_id,
+    _source: 'jikan',          // FIX: tag the source so embed servers know
+    _malId: a.mal_id,
     title: { romaji: a.title, english: a.title_english || a.title, native: a.title_japanese || null },
     coverImage: { large: a.images?.jpg?.large_image_url || a.images?.jpg?.image_url || '', extraLarge: a.images?.jpg?.large_image_url || '' },
     bannerImage: null,
@@ -1523,65 +1573,48 @@ function jikanToAnime(a) {
     format: formatMap[a.type] || a.type || null,
     studios: { nodes: (a.studios || []).map(s => ({ name: s.name })) },
     nextAiringEpisode: null,
-    _source: 'jikan'
   };
 }
 
-// ── Jikan rate-limit safe fetch (max 3 req/sec) ───────────────────
-let _jikanLast = 0;
-async function jikanFetch(path) {
-  const wait = 340 - (Date.now() - _jikanLast);
-  if (wait > 0) await new Promise(r => setTimeout(r, wait));
-  _jikanLast = Date.now();
-  const r = await fetch(JIKAN + path);
-  if (!r.ok) throw new Error(`Jikan ${r.status}`);
-  return r.json();
+// Core GQL call — does NOT set any global state, just tries AniList
+async function tryAnilist(query, vars = {}) {
+  const r = await fetch(AL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, variables: vars }),
+    signal: AbortSignal.timeout(8000)
+  });
+  if (!r.ok) throw new Error(`AniList HTTP ${r.status}`);
+  const json = await r.json();
+  if (json.errors) throw new Error(json.errors[0]?.message || 'AniList error');
+  return json.data;
 }
 
-// ── Core GQL with auto-fallback ───────────────────────────────────
-async function gql(query, vars={}) {
-  if (_apiSource === 'jikan') throw new Error('jikan_mode');
-  try {
-    const r = await fetch(AL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, variables: vars }),
-      signal: AbortSignal.timeout(8000)
-    });
-    if (!r.ok) throw new Error(`AniList ${r.status}`);
-    const json = await r.json();
-    if (json.errors) throw new Error(json.errors[0]?.message || 'AniList error');
-    _apiSource = 'anilist';
-    return json.data;
-  } catch(e) {
-    if (e.message !== 'jikan_mode') {
-      console.warn('[AniBlossom] AniList unavailable, switching to Jikan:', e.message);
-      _apiSource = 'jikan';
-    }
-    throw e;
-  }
-}
-async function cachedGql(cacheKey, query, vars={}) {
-  const hit = cacheGet(cacheKey);
-  if (hit) return hit;
-  const data = await gql(query, vars);
-  cacheSet(cacheKey, data);
-  return data;
-}
+// ─────────────────────────────────────────────────────────────────
+// Fetch helpers — always try AniList first, Jikan if down
+// ─────────────────────────────────────────────────────────────────
 
-// ── Fetch functions — AniList primary, Jikan automatic fallback ───
 async function fetchList(tab, page, genre) {
   const cacheKey = `list_${tab}_${page}_${genre||'all'}`;
   const hit = cacheGet(cacheKey);
   if (hit) return hit;
-  if (_apiSource === 'anilist') {
+
+  // Try AniList
+  if (isAnilistAvailable()) {
     try {
       const g = genre ? `,genre_in:["${genre}"]` : '';
       const sort = tab==='newest' ? 'START_DATE_DESC' : tab==='popular' ? 'POPULARITY_DESC' : 'SCORE_DESC';
       const q = `query($p:Int){Page(page:$p,perPage:20){media(type:ANIME,sort:${sort},isAdult:false${g}){${FIELDS}}}}`;
-      return await cachedGql(cacheKey, q, {p:page});
-    } catch(e) { /* fall through */ }
+      const data = await tryAnilist(q, {p: page});
+      markAnilistUp();
+      cacheSet(cacheKey, data);
+      return data;
+    } catch(e) {
+      markAnilistDown();
+    }
   }
+
+  // Jikan fallback
   try {
     const orderMap = { newest:'start_date', popular:'members', top:'score' };
     const json = await jikanFetch(`/anime?order_by=${orderMap[tab]||'members'}&sort=desc&page=${page}&limit=20&sfw=true${genre?`&genres=${encodeURIComponent(genre)}`:''}` );
@@ -1595,10 +1628,16 @@ async function fetchTrending() {
   const cacheKey = 'trending';
   const hit = cacheGet(cacheKey);
   if (hit) return hit;
-  if (_apiSource === 'anilist') {
-    try { return await cachedGql(cacheKey, `query{Page(perPage:5){media(type:ANIME,sort:TRENDING_DESC,isAdult:false){${FIELDS}}}}`); }
-    catch(e) { /* fall through */ }
+
+  if (isAnilistAvailable()) {
+    try {
+      const data = await tryAnilist(`query{Page(perPage:5){media(type:ANIME,sort:TRENDING_DESC,isAdult:false){${FIELDS}}}}`);
+      markAnilistUp();
+      cacheSet(cacheKey, data);
+      return data;
+    } catch(e) { markAnilistDown(); }
   }
+
   try {
     const json = await jikanFetch('/top/anime?filter=airing&limit=5');
     const result = { Page: { media: dedup((json.data||[]).map(jikanToAnime).filter(Boolean)) } };
@@ -1611,10 +1650,16 @@ async function fetchTopAiring() {
   const cacheKey = 'topairing';
   const hit = cacheGet(cacheKey);
   if (hit) return hit;
-  if (_apiSource === 'anilist') {
-    try { return await cachedGql(cacheKey, `query{Page(perPage:10){media(type:ANIME,sort:POPULARITY_DESC,status:RELEASING,isAdult:false){id title{romaji english} coverImage{large} nextAiringEpisode{episode} averageScore format episodes}}}`); }
-    catch(e) { /* fall through */ }
+
+  if (isAnilistAvailable()) {
+    try {
+      const data = await tryAnilist(`query{Page(perPage:10){media(type:ANIME,sort:POPULARITY_DESC,status:RELEASING,isAdult:false){id title{romaji english} coverImage{large} nextAiringEpisode{episode} averageScore format episodes}}}`);
+      markAnilistUp();
+      cacheSet(cacheKey, data);
+      return data;
+    } catch(e) { markAnilistDown(); }
   }
+
   try {
     const json = await jikanFetch('/top/anime?filter=airing&limit=10');
     const result = { Page: { media: dedup((json.data||[]).map(jikanToAnime).filter(Boolean)) } };
@@ -1624,24 +1669,39 @@ async function fetchTopAiring() {
 }
 
 async function fetchSearch(q) {
-  if (_apiSource === 'anilist') {
-    try { return await gql(`query($q:String){Page(perPage:8){media(type:ANIME,search:$q,isAdult:false){${FIELDS}}}}`, {q}); }
-    catch(e) { /* fall through */ }
+  if (isAnilistAvailable()) {
+    try {
+      const data = await tryAnilist(`query($q:String){Page(perPage:8){media(type:ANIME,search:$q,isAdult:false){${FIELDS}}}}`, {q});
+      markAnilistUp();
+      return data;
+    } catch(e) { markAnilistDown(); }
   }
+
   try {
     const json = await jikanFetch(`/anime?q=${encodeURIComponent(q)}&limit=8&sfw=true`);
     return { Page: { media: dedup((json.data||[]).map(jikanToAnime).filter(Boolean)) } };
   } catch(e) { return { Page: { media: [] } }; }
 }
 
-async function fetchRelated(id) {
+async function fetchRelated(id, isJikanSource) {
   const cacheKey = `related_${id}`;
   const hit = cacheGet(cacheKey);
   if (hit) return hit;
-  if (_apiSource === 'anilist') {
-    try { return await cachedGql(cacheKey, `query($id:Int){Media(id:$id){recommendations(perPage:6){nodes{mediaRecommendation{id title{romaji english} coverImage{large} episodes averageScore status format}}}}}`,{id}); }
-    catch(e) { /* fall through */ }
+
+  // Only try AniList if this is an AniList ID (not a Jikan/MAL ID)
+  if (!isJikanSource && isAnilistAvailable()) {
+    try {
+      const data = await tryAnilist(
+        `query($id:Int){Media(id:$id){recommendations(perPage:6){nodes{mediaRecommendation{id title{romaji english} coverImage{large} episodes averageScore status format}}}}}`,
+        {id}
+      );
+      markAnilistUp();
+      cacheSet(cacheKey, data);
+      return data;
+    } catch(e) { markAnilistDown(); }
   }
+
+  // Jikan fallback (works with MAL ID)
   try {
     const json = await jikanFetch(`/anime/${id}/recommendations`);
     const nodes = (json.data||[]).slice(0,6).map(r => ({ mediaRecommendation: jikanToAnime(r.entry) })).filter(n => n.mediaRecommendation);
@@ -1651,35 +1711,54 @@ async function fetchRelated(id) {
   } catch(e) { return { Media: { recommendations: { nodes: [] } } }; }
 }
 
+// FIX: fetchAnimeById always tries AniList first, then Jikan
+// This means even if _anilistDown is set, we still attempt AniList
+// (important for history items that were saved with AniList IDs)
 async function fetchAnimeById(id) {
   const cacheKey = `anime_${id}`;
   const hit = cacheGet(cacheKey);
   if (hit) return hit;
-  if (_apiSource === 'anilist') {
-    try { return await cachedGql(cacheKey, `query($id:Int){Media(id:$id){${FIELDS}}}`, {id}); }
-    catch(e) { /* fall through */ }
-  }
+
+  // Always try AniList first for by-ID lookups (IDs in history are AniList IDs)
   try {
-    const json = await jikanFetch(`/anime/${id}/full`);
-    const result = { Media: jikanToAnime(json.data) };
-    cacheSet(cacheKey, result);
-    return result;
-  } catch(e) { return null; }
+    const data = await tryAnilist(`query($id:Int){Media(id:$id){${FIELDS}}}`, {id});
+    markAnilistUp();
+    cacheSet(cacheKey, data);
+    return data;
+  } catch(e) {
+    // AniList failed — now try Jikan (id might be MAL ID too)
+    markAnilistDown();
+    try {
+      const json = await jikanFetch(`/anime/${id}/full`);
+      const result = { Media: jikanToAnime(json.data) };
+      cacheSet(cacheKey, result);
+      return result;
+    } catch(e2) { return null; }
+  }
 }
 
 async function fetchEpisodeMeta(animeId) {
   const key = `epmeta_${animeId}`;
   const cached = cacheGet(key);
   if (cached) return cached;
+
+  // Episode meta only available via AniList
+  if (!isAnilistAvailable()) return [];
   try {
-    const data = await gql(`query($id:Int){Media(id:$id){streamingEpisodes{title thumbnail site}}}`, {id: animeId});
+    const data = await tryAnilist(`query($id:Int){Media(id:$id){streamingEpisodes{title thumbnail site}}}`, {id: animeId});
+    markAnilistUp();
     const eps = (data?.Media?.streamingEpisodes || []).slice().reverse();
     cacheSet(key, eps);
     return eps;
-  } catch(e) { return []; }
+  } catch(e) {
+    markAnilistDown();
+    return [];
+  }
 }
 
-// ── USER PROFILE / FIRESTORE ──────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// USER PROFILE / FIRESTORE
+// ─────────────────────────────────────────────────────────────────
 window.ensureUserProfile = async function(user) {
   const fb = window.__fb;
   if (!fb) return;
@@ -1797,7 +1876,9 @@ async function saveUsername() {
   }
 }
 
-// ── State ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────────────────
 let heroList = [], currentHeroIdx = 0, heroTimer = null;
 let currentTab = 'newest', currentPage = 1, currentGenre = null;
 let currentAnime = null, currentEp = 1, currentSeason = 1, totalEps = 0;
@@ -1809,7 +1890,9 @@ let currentEpMeta = [];
 let commentsUnsub = null;
 let _suppressHashChange = false;
 
-// ── HASH ROUTING ──────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// HASH ROUTING
+// ─────────────────────────────────────────────────────────────────
 function updateHash(animeId, ep) {
   _suppressHashChange = true;
   location.hash = `#/watch/${animeId}/${ep}`;
@@ -1844,6 +1927,7 @@ async function handleHashChange() {
     if (document.getElementById('home-view').style.display !== 'none' ||
         !currentAnime || currentAnime.id !== animeId || currentEp !== ep) {
       try {
+        // FIX: use fetchAnimeById which properly handles both AniList and Jikan IDs
         const data = await fetchAnimeById(animeId);
         if (data?.Media) {
           _suppressHashChange = true;
@@ -1859,16 +1943,27 @@ async function handleHashChange() {
 
 window.addEventListener('hashchange', handleHashChange);
 
-// ── History ───────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// HISTORY
+// ─────────────────────────────────────────────────────────────────
 function getHistory() { try { return JSON.parse(localStorage.getItem('ab_history') || '[]'); } catch{ return []; } }
+
 function addHistory(anime, ep) {
   let h = getHistory().filter(x => x.id !== anime.id);
-  h.unshift({ id: anime.id, title: anime.title.english||anime.title.romaji, img: anime.coverImage.large, ep });
+  h.unshift({
+    id: anime.id,
+    title: anime.title.english||anime.title.romaji,
+    img: anime.coverImage.large,
+    ep,
+    _source: anime._source || 'anilist'  // FIX: track the source
+  });
   if (h.length > 12) h = h.slice(0,12);
   localStorage.setItem('ab_history', JSON.stringify(h));
   renderHistory();
 }
+
 function clearHistory() { localStorage.removeItem('ab_history'); renderHistory(); }
+
 function renderHistory() {
   const h = getHistory();
   const sec = document.getElementById('historySection');
@@ -1876,26 +1971,40 @@ function renderHistory() {
   sec.style.display = 'block';
   document.getElementById('histRow').innerHTML = h.map((x,i) => `
     <div class="hist-card" onclick="openFromHistory(${i})">
-      <img class="hist-thumb" src="${x.img}" alt="${x.title}" loading="lazy">
+      <img class="hist-thumb" src="${x.img}" alt="${escHtml(x.title)}" loading="lazy">
       <div class="hist-ep-tag">EP ${x.ep}</div>
       <div class="hist-close" onclick="event.stopPropagation();removeHistory(${x.id})">&#x2715;</div>
-      <div class="hist-name">${x.title}</div>
+      <div class="hist-name">${escHtml(x.title)}</div>
     </div>`).join('');
 }
+
 function removeHistory(id) {
   let h = getHistory().filter(x => x.id !== id);
   localStorage.setItem('ab_history', JSON.stringify(h));
   renderHistory();
 }
-function openFromHistory(i) {
+
+// FIX: openFromHistory now uses fetchAnimeById which has proper Jikan fallback
+// — no more "Uncaught Error: jikan_mode"
+async function openFromHistory(i) {
   const h = getHistory()[i];
   if (!h) return;
-  gql(`query($id:Int){Media(id:$id){${FIELDS}}}`,{id:h.id}).then(d => {
-    if (d.Media) openWatch(d.Media, h.ep);
-  });
+  try {
+    // fetchAnimeById always tries AniList first, falls back to Jikan if needed
+    const data = await fetchAnimeById(h.id);
+    if (data?.Media) {
+      openWatch(data.Media, h.ep);
+    } else {
+      showToast('Could not load anime info. Please search for it instead.', 'error');
+    }
+  } catch(e) {
+    showToast('Failed to load anime from history.', 'error');
+  }
 }
 
-// ── Hero ──────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// HERO
+// ─────────────────────────────────────────────────────────────────
 function setHero(list) {
   heroList = list; currentHeroIdx = 0;
   renderHero(); renderHeroNav();
@@ -1931,25 +2040,28 @@ function updateHeroDots() { document.querySelectorAll('.hero-dot').forEach((d,i)
 function playHero() { if(heroList[currentHeroIdx]) openWatch(heroList[currentHeroIdx]); }
 function goToAnimeInfo() { if(heroList[currentHeroIdx]) openWatch(heroList[currentHeroIdx]); }
 
-// ── Grid ──────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// GRID
+// ─────────────────────────────────────────────────────────────────
 function renderGrid(list) {
   const grid = document.getElementById('animeGrid');
-  list = dedup(list); // remove any duplicate ids before rendering
+  list = dedup(list);
   if (!list.length) { grid.innerHTML = '<p style="color:var(--muted);padding:2rem;grid-column:1/-1">No results found.</p>'; return; }
   grid.innerHTML = list.map(a => {
     const title = a.title.english||a.title.romaji;
     const score = a.averageScore ? (a.averageScore/10).toFixed(1) : '';
     const eps = a.episodes ? `${a.episodes} EPS` : a.status==='RELEASING' ? 'ONGOING' : '';
     const airing = a.status==='RELEASING';
+    // Serialize safely for onclick — use data-index approach instead of inline JSON
     return `<div class="ac" onclick="openWatch(${JSON.stringify(a).replace(/"/g,'&quot;')})">
       <div class="ac-img-w">
-        <img src="${a.coverImage.large}" alt="${title}" loading="lazy" onerror="this.src='data:image/svg+xml,<svg xmlns=&quot;http://www.w3.org/2000/svg&quot; viewBox=&quot;0 0 100 150&quot;><rect fill=&quot;%23242430&quot; width=&quot;100&quot; height=&quot;150&quot;/></svg>'">
+        <img src="${a.coverImage.large}" alt="${escHtml(title)}" loading="lazy" onerror="this.src='data:image/svg+xml,<svg xmlns=&quot;http://www.w3.org/2000/svg&quot; viewBox=&quot;0 0 100 150&quot;><rect fill=&quot;%23242430&quot; width=&quot;100&quot; height=&quot;150&quot;/></svg>'">
         ${score?`<div class="ac-score">&#x2605; ${score}</div>`:''}
         ${eps?`<div class="ac-ep">${eps}</div>`:''}
         ${airing?`<div class="ac-dot"></div>`:''}
       </div>
       <div class="ac-info">
-        <div class="ac-title">${title}</div>
+        <div class="ac-title">${escHtml(title)}</div>
         <div class="ac-meta">${(a.genres||[]).slice(0,2).join(' · ')}</div>
       </div>
     </div>`;
@@ -2012,14 +2124,16 @@ async function loadSidebar() {
     return `<div class="sb-item" onclick='openWatch(${JSON.stringify(a)})'>
       <img class="sb-thumb" src="${a.coverImage.large}" loading="lazy">
       <div class="sb-info">
-        <div class="sb-name">${title}</div>
+        <div class="sb-name">${escHtml(title)}</div>
         <div class="sb-sub">${airing?'<span class="sb-live"></span>':''} ${ep} ${score?'· '+score:''}</div>
       </div>
     </div>`;
   }).join('');
 }
 
-// ── Watch ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// WATCH
+// ─────────────────────────────────────────────────────────────────
 function openWatch(anime, ep=1) {
   if (typeof anime === 'string') anime = JSON.parse(anime);
   currentAnime = anime;
@@ -2046,13 +2160,24 @@ function openWatch(anime, ep=1) {
   loadPlayer(currentSeason, ep);
   renderWatchInfo(anime, ep);
   buildEpSidebar(anime);
-  loadRelated(anime.id);
+  loadRelated(anime.id, anime._source === 'jikan');
   renderComments(anime.id, ep);
   addHistory(anime, ep);
   trackWatchedAnime(anime.id);
   updateHash(anime.id, ep);
+
+  // FIX: Warn user if AniList is down and they're on Server 1/2
+  // (those servers use AniList IDs; Jikan IDs may not work)
+  if (anime._source === 'jikan' && (currentServer === 'filmu' || currentServer === 'animplay')) {
+    setTimeout(() => {
+      showToast('AniList is offline — Server 3 recommended for best playback', 'error');
+    }, 800);
+  }
 }
 
+// FIX: buildEmbedUrl — when anime is from Jikan source, Server 1/2 may
+// not work since they expect AniList IDs. We still attempt it and let
+// the user know via the warning above.
 function buildEmbedUrl(server, anilistId, season, ep, dub) {
   return getProvider(server).getUrl(anilistId, season, ep, dub);
 }
@@ -2073,12 +2198,19 @@ function switchServer(server) {
     document.getElementById(id)?.classList.remove('active');
   });
   document.getElementById('srv-' + server)?.classList.add('active');
+
+  // FIX: warn about Jikan ID incompatibility on Server 1/2
+  if (currentAnime?._source === 'jikan' && (server === 'filmu' || server === 'animplay')) {
+    showToast('AniList is offline — this server may not work. Try Server 3 instead.', 'error');
+  }
+
   if (server === 'anistream') {
     document.getElementById('dubToggle').style.display = 'none';
     if (currentAnime) loadAnistreamPlayer(currentAnime, currentEp);
     showToast('Switched to Server 3 (Best)', 'success');
   } else {
     hideAnistreamStatus();
+    // Rebuild standard ep sidebar if we were on anistream
     if (anistreamEpData.length) buildEpSidebar(currentAnime);
     loadPlayer(currentSeason, currentEp);
     showToast(`Switched to ${getProvider(server).name}`, 'success');
@@ -2101,29 +2233,31 @@ function renderWatchInfo(anime, ep) {
   const studio = anime.studios?.nodes?.[0]?.name || '';
   document.getElementById('animeDetail').innerHTML = `
     <div class="detail-poster">
-      <img src="${anime.coverImage.extraLarge||anime.coverImage.large}" alt="${title}">
+      <img src="${anime.coverImage.extraLarge||anime.coverImage.large}" alt="${escHtml(title)}">
       <div class="detail-poster-btns">
         <div class="dpb">TRAILER</div>
         <div class="dpb">+ LIST</div>
       </div>
     </div>
     <div class="detail-info">
-      <div class="detail-title">${title}</div>
-      <div class="detail-native">${anime.title.native||''}</div>
-      <div class="detail-genre-tags">${(anime.genres||[]).slice(0,4).map(g=>`<span class="dg-tag">${g}</span>`).join('')}</div>
-      <div class="detail-desc">${stripHtml(anime.description||'')}</div>
+      <div class="detail-title">${escHtml(title)}</div>
+      <div class="detail-native">${escHtml(anime.title.native||'')}</div>
+      <div class="detail-genre-tags">${(anime.genres||[]).slice(0,4).map(g=>`<span class="dg-tag">${escHtml(g)}</span>`).join('')}</div>
+      <div class="detail-desc">${escHtml(stripHtml(anime.description||''))}</div>
       <div class="detail-stats">
-        <div class="ds">Format: <strong>${anime.format||'-'}</strong></div>
-        <div class="ds">Status: <strong>${anime.status||'-'}</strong></div>
+        <div class="ds">Format: <strong>${escHtml(anime.format||'-')}</strong></div>
+        <div class="ds">Status: <strong>${escHtml(anime.status||'-')}</strong></div>
         <div class="ds">Episodes: <strong>${anime.episodes||'-'}</strong></div>
         <div class="ds">Rating: <strong>${anime.averageScore||'-'}/100</strong></div>
         <div class="ds">Year: <strong>${anime.startDate?.year||'-'}</strong></div>
-        <div class="ds">Studio: <strong>${studio||'-'}</strong></div>
+        <div class="ds">Studio: <strong>${escHtml(studio||'-')}</strong></div>
       </div>
     </div>`;
 }
 
-// ── Episode Sidebar ───────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// EPISODE SIDEBAR
+// ─────────────────────────────────────────────────────────────────
 async function buildEpSidebar(anime) {
   totalEps = anime.episodes || 24;
   allEpItems = Array.from({length: totalEps}, (_,i) => i+1);
@@ -2131,11 +2265,14 @@ async function buildEpSidebar(anime) {
   currentEpMeta = [];
   renderEpPages();
   renderEpList(allEpItems.slice(0, epPageSize), currentEp);
-  const meta = await fetchEpisodeMeta(anime.id);
-  if (meta && meta.length) {
-    currentEpMeta = meta;
-    const curSlice = allEpItems.slice(epPageCurrent * epPageSize, (epPageCurrent + 1) * epPageSize);
-    renderEpList(curSlice, currentEp);
+  // Episode meta only available via AniList, skip if Jikan source
+  if (anime._source !== 'jikan') {
+    const meta = await fetchEpisodeMeta(anime.id);
+    if (meta && meta.length) {
+      currentEpMeta = meta;
+      const curSlice = allEpItems.slice(epPageCurrent * epPageSize, (epPageCurrent + 1) * epPageSize);
+      renderEpList(curSlice, currentEp);
+    }
   }
 }
 
@@ -2218,28 +2355,32 @@ function filterEps(q) {
   renderEpList(filtered, currentEp);
 }
 
-// ── Related ───────────────────────────────────────────────────────
-async function loadRelated(id) {
+// ─────────────────────────────────────────────────────────────────
+// RELATED
+// ─────────────────────────────────────────────────────────────────
+async function loadRelated(id, isJikanSource) {
   const rw = document.getElementById('relatedWrap');
   rw.innerHTML = '<div class="rel-title">Recommendations</div><div style="color:var(--muted);font-size:0.8rem;padding:0.5rem">Loading...</div>';
   try {
-    const data = await fetchRelated(id);
+    const data = await fetchRelated(id, isJikanSource);
     const recs = data.Media.recommendations.nodes.map(n=>n.mediaRecommendation).filter(Boolean).slice(0,6);
-    rw.innerHTML = `<div class="rel-title">Recommendations</div>` + recs.map(a=>{
+    rw.innerHTML = `<div class="rel-title">Recommendations</div>` + (recs.length ? recs.map(a=>{
       const title = a.title.english||a.title.romaji;
       const airing = a.status==='RELEASING';
       return `<div class="rel-item" onclick='openWatch(${JSON.stringify(a)})'>
         <img class="rel-thumb" src="${a.coverImage.large}" loading="lazy">
         <div class="rel-info">
-          <div class="rel-name">${airing?'<span class="rel-live"></span>':''}${title}</div>
+          <div class="rel-name">${airing?'<span class="rel-live"></span>':''}${escHtml(title)}</div>
           <div class="rel-meta">${a.format||''} ${a.episodes?'· '+a.episodes+' eps':''} ${a.averageScore?'· &#x2605;'+(a.averageScore/10).toFixed(1):''}</div>
         </div>
       </div>`;
-    }).join('');
-  } catch(e) { rw.innerHTML = ''; }
+    }).join('') : '<div style="color:var(--muted);font-size:0.8rem;padding:0.5rem">No recommendations found.</div>');
+  } catch(e) { rw.innerHTML = '<div class="rel-title">Recommendations</div>'; }
 }
 
-// ── Comments ──────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// COMMENTS
+// ─────────────────────────────────────────────────────────────────
 function renderComments(animeId, ep) {
   const wrap = document.getElementById('commentsWrap');
   if (commentsUnsub) { commentsUnsub(); commentsUnsub = null; }
@@ -2346,7 +2487,9 @@ async function postComment(key) {
   }
 }
 
-// ── Views ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// VIEWS
+// ─────────────────────────────────────────────────────────────────
 function _internalShowHome() {
   document.getElementById('home-view').style.display = 'block';
   document.getElementById('watch-view').style.display = 'none';
@@ -2378,7 +2521,9 @@ function show404(path) {
   window.scrollTo(0,0);
 }
 
-// ── Auth ──────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// AUTH
+// ─────────────────────────────────────────────────────────────────
 function openAuthModal(tab='login') {
   document.getElementById('authModal').classList.add('open');
   switchAuthTab(tab);
@@ -2529,7 +2674,9 @@ async function doSignOut() {
   showToast('Signed out. See you soon!', 'success');
 }
 
-// ── Search ────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// SEARCH
+// ─────────────────────────────────────────────────────────────────
 let searchTimer;
 const si = document.getElementById('searchInput');
 const sd = document.getElementById('searchDropdown');
@@ -2549,7 +2696,7 @@ si.addEventListener('input', () => {
       return `<div class="sd-item" onclick='pickSearch(${JSON.stringify(a).replace(/'/g,"&#39;")})'>
         <img class="sd-thumb" src="${a.coverImage.large}" loading="lazy">
         <div class="sd-info">
-          <div class="sd-title">${title}</div>
+          <div class="sd-title">${escHtml(title)}</div>
           <div class="sd-meta">${a.startDate?.year||''} ${a.format?'· '+a.format:''} ${a.episodes?'· '+a.episodes+' eps':''}</div>
         </div>
       </div>`;
@@ -2564,14 +2711,18 @@ function pickSearch(anime) {
   openWatch(anime);
 }
 
-// ── Share ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// SHARE
+// ─────────────────────────────────────────────────────────────────
 function shareAnime() {
   const url = window.location.href;
   if (navigator.share) navigator.share({ title: currentAnime?.title?.english, url });
   else { navigator.clipboard.writeText(url); showToast('Link copied!', 'success'); }
 }
 
-// ── Maintenance petals ────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// MAINTENANCE PETALS
+// ─────────────────────────────────────────────────────────────────
 function spawnPetals() {
   const container = document.getElementById('maintPetals');
   if (!container) return;
@@ -2584,16 +2735,20 @@ function spawnPetals() {
 }
 spawnPetals();
 
-// ── Toast ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// TOAST
+// ─────────────────────────────────────────────────────────────────
 let toastTimer;
 function showToast(msg, type='success') {
   const t = document.getElementById('toast');
   t.textContent = msg; t.className = `toast ${type} show`;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
 }
 
-// ── Util ──────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// UTILS
+// ─────────────────────────────────────────────────────────────────
 function stripHtml(s) { return s.replace(/<[^>]*>/g,'').replace(/&[^;]+;/g,' ').trim(); }
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function timeAgo(d) {
@@ -2604,7 +2759,9 @@ function timeAgo(d) {
   return `${Math.floor(diff/86400)}d ago`;
 }
 
-// ── Init ──────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────────────────────────
 (async () => {
   renderHistory();
   showDailyBanner();
