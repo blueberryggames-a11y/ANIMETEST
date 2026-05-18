@@ -1481,8 +1481,9 @@ function hideAnistreamStatus() {
 const AL = 'https://graphql.anilist.co';
 const FIELDS = `id title{romaji english native} coverImage{large extraLarge} bannerImage description(asHtml:false) episodes averageScore genres status startDate{year} format studios{nodes{name}} nextAiringEpisode{episode}`;
 
-// ── Jikan (MyAnimeList REST API) — fallback when AniList is down ──
+// ── Jikan (MyAnimeList REST) — automatic fallback if AniList is down
 const JIKAN = 'https://api.jikan.moe/v4';
+let _apiSource = 'anilist'; // flips to 'jikan' automatically on failure
 
 // ── Cache (1-hour TTL) ────────────────────────────────────────────
 const CACHE_TTL = 60 * 60 * 1000;
@@ -1497,13 +1498,17 @@ function cacheGet(key) {
   } catch(e) { return null; }
 }
 
-// ── API source tracker ────────────────────────────────────────────
-let _apiSource = 'anilist'; // 'anilist' | 'jikan'
+// ── Deduplicate by id ─────────────────────────────────────────────
+function dedup(arr) {
+  const seen = new Set();
+  return arr.filter(a => { if (!a || seen.has(a.id)) return false; seen.add(a.id); return true; });
+}
 
-// ── Jikan → AniList shape mapper ─────────────────────────────────
+// ── Jikan → AniList shape ─────────────────────────────────────────
 function jikanToAnime(a) {
-  const statusMap = { 'Currently Airing': 'RELEASING', 'Finished Airing': 'FINISHED', 'Not yet aired': 'NOT_YET_RELEASED' };
-  const formatMap = { 'TV': 'TV', 'Movie': 'MOVIE', 'OVA': 'OVA', 'ONA': 'ONA', 'Special': 'SPECIAL', 'Music': 'MUSIC' };
+  if (!a) return null;
+  const statusMap = { 'Currently Airing':'RELEASING', 'Finished Airing':'FINISHED', 'Not yet aired':'NOT_YET_RELEASED' };
+  const formatMap  = { 'TV':'TV', 'Movie':'MOVIE', 'OVA':'OVA', 'ONA':'ONA', 'Special':'SPECIAL', 'Music':'MUSIC' };
   return {
     id: a.mal_id,
     title: { romaji: a.title, english: a.title_english || a.title, native: a.title_japanese || null },
@@ -1523,20 +1528,19 @@ function jikanToAnime(a) {
 }
 
 // ── Jikan rate-limit safe fetch (max 3 req/sec) ───────────────────
-let _jikanLastCall = 0;
+let _jikanLast = 0;
 async function jikanFetch(path) {
-  const now = Date.now();
-  const wait = 340 - (now - _jikanLastCall);
+  const wait = 340 - (Date.now() - _jikanLast);
   if (wait > 0) await new Promise(r => setTimeout(r, wait));
-  _jikanLastCall = Date.now();
+  _jikanLast = Date.now();
   const r = await fetch(JIKAN + path);
-  if (!r.ok) throw new Error(`Jikan HTTP ${r.status}`);
+  if (!r.ok) throw new Error(`Jikan ${r.status}`);
   return r.json();
 }
 
-// ── Core GQL with AniList → Jikan fallback ───────────────────────
+// ── Core GQL with auto-fallback ───────────────────────────────────
 async function gql(query, vars={}) {
-  if (_apiSource === 'jikan') throw new Error('jikan_mode'); // skip straight to fallback
+  if (_apiSource === 'jikan') throw new Error('jikan_mode');
   try {
     const r = await fetch(AL, {
       method: 'POST',
@@ -1544,18 +1548,19 @@ async function gql(query, vars={}) {
       body: JSON.stringify({ query, variables: vars }),
       signal: AbortSignal.timeout(8000)
     });
-    if (!r.ok) throw new Error(`AniList HTTP ${r.status}`);
+    if (!r.ok) throw new Error(`AniList ${r.status}`);
     const json = await r.json();
     if (json.errors) throw new Error(json.errors[0]?.message || 'AniList error');
     _apiSource = 'anilist';
     return json.data;
   } catch(e) {
-    console.warn('[AniBlossom] AniList failed, switching to Jikan backup:', e.message);
-    _apiSource = 'jikan';
+    if (e.message !== 'jikan_mode') {
+      console.warn('[AniBlossom] AniList unavailable, switching to Jikan:', e.message);
+      _apiSource = 'jikan';
+    }
     throw e;
   }
 }
-
 async function cachedGql(cacheKey, query, vars={}) {
   const hit = cacheGet(cacheKey);
   if (hit) return hit;
@@ -1564,55 +1569,39 @@ async function cachedGql(cacheKey, query, vars={}) {
   return data;
 }
 
-// ── Fetch functions with Jikan fallback built in ──────────────────
+// ── Fetch functions — AniList primary, Jikan automatic fallback ───
 async function fetchList(tab, page, genre) {
   const cacheKey = `list_${tab}_${page}_${genre||'all'}`;
   const hit = cacheGet(cacheKey);
   if (hit) return hit;
-
-  // Try AniList
   if (_apiSource === 'anilist') {
     try {
       const g = genre ? `,genre_in:["${genre}"]` : '';
       const sort = tab==='newest' ? 'START_DATE_DESC' : tab==='popular' ? 'POPULARITY_DESC' : 'SCORE_DESC';
-      const query = `query($p:Int){Page(page:$p,perPage:20){media(type:ANIME,sort:${sort},isAdult:false${g}){${FIELDS}}}}`;
-      const data = await cachedGql(cacheKey, query, {p:page});
-      return data;
-    } catch(e) { /* fall through to Jikan */ }
+      const q = `query($p:Int){Page(page:$p,perPage:20){media(type:ANIME,sort:${sort},isAdult:false${g}){${FIELDS}}}}`;
+      return await cachedGql(cacheKey, q, {p:page});
+    } catch(e) { /* fall through */ }
   }
-
-  // Jikan fallback
   try {
-    const orderMap = { newest: 'start_date', popular: 'members', top: 'score' };
-    const order = orderMap[tab] || 'members';
-    let path = `/anime?order_by=${order}&sort=desc&page=${page}&limit=20&sfw=true`;
-    if (genre) path += `&genres=${encodeURIComponent(genre)}`;
-    const json = await jikanFetch(path);
-    const media = (json.data || []).map(jikanToAnime);
-    const result = { Page: { media } };
+    const orderMap = { newest:'start_date', popular:'members', top:'score' };
+    const json = await jikanFetch(`/anime?order_by=${orderMap[tab]||'members'}&sort=desc&page=${page}&limit=20&sfw=true${genre?`&genres=${encodeURIComponent(genre)}`:''}` );
+    const result = { Page: { media: dedup((json.data||[]).map(jikanToAnime).filter(Boolean)) } };
     cacheSet(cacheKey, result);
     return result;
-  } catch(e) {
-    console.error('[AniBlossom] Jikan fetchList also failed:', e.message);
-    return { Page: { media: [] } };
-  }
+  } catch(e) { return { Page: { media: [] } }; }
 }
 
 async function fetchTrending() {
   const cacheKey = 'trending';
   const hit = cacheGet(cacheKey);
   if (hit) return hit;
-
   if (_apiSource === 'anilist') {
-    try {
-      const data = await cachedGql(cacheKey, `query{Page(perPage:5){media(type:ANIME,sort:TRENDING_DESC,isAdult:false){${FIELDS}}}}`);
-      return data;
-    } catch(e) { /* fall through */ }
+    try { return await cachedGql(cacheKey, `query{Page(perPage:5){media(type:ANIME,sort:TRENDING_DESC,isAdult:false){${FIELDS}}}}`); }
+    catch(e) { /* fall through */ }
   }
-
   try {
     const json = await jikanFetch('/top/anime?filter=airing&limit=5');
-    const result = { Page: { media: (json.data || []).map(jikanToAnime) } };
+    const result = { Page: { media: dedup((json.data||[]).map(jikanToAnime).filter(Boolean)) } };
     cacheSet(cacheKey, result);
     return result;
   } catch(e) { return { Page: { media: [] } }; }
@@ -1622,17 +1611,13 @@ async function fetchTopAiring() {
   const cacheKey = 'topairing';
   const hit = cacheGet(cacheKey);
   if (hit) return hit;
-
   if (_apiSource === 'anilist') {
-    try {
-      const data = await cachedGql(cacheKey, `query{Page(perPage:10){media(type:ANIME,sort:POPULARITY_DESC,status:RELEASING,isAdult:false){id title{romaji english} coverImage{large} nextAiringEpisode{episode} averageScore format episodes}}}`);
-      return data;
-    } catch(e) { /* fall through */ }
+    try { return await cachedGql(cacheKey, `query{Page(perPage:10){media(type:ANIME,sort:POPULARITY_DESC,status:RELEASING,isAdult:false){id title{romaji english} coverImage{large} nextAiringEpisode{episode} averageScore format episodes}}}`); }
+    catch(e) { /* fall through */ }
   }
-
   try {
     const json = await jikanFetch('/top/anime?filter=airing&limit=10');
-    const result = { Page: { media: (json.data || []).map(jikanToAnime) } };
+    const result = { Page: { media: dedup((json.data||[]).map(jikanToAnime).filter(Boolean)) } };
     cacheSet(cacheKey, result);
     return result;
   } catch(e) { return { Page: { media: [] } }; }
@@ -1640,14 +1625,12 @@ async function fetchTopAiring() {
 
 async function fetchSearch(q) {
   if (_apiSource === 'anilist') {
-    try {
-      return await gql(`query($q:String){Page(perPage:8){media(type:ANIME,search:$q,isAdult:false){${FIELDS}}}}`, {q});
-    } catch(e) { /* fall through */ }
+    try { return await gql(`query($q:String){Page(perPage:8){media(type:ANIME,search:$q,isAdult:false){${FIELDS}}}}`, {q}); }
+    catch(e) { /* fall through */ }
   }
-
   try {
     const json = await jikanFetch(`/anime?q=${encodeURIComponent(q)}&limit=8&sfw=true`);
-    return { Page: { media: (json.data || []).map(jikanToAnime) } };
+    return { Page: { media: dedup((json.data||[]).map(jikanToAnime).filter(Boolean)) } };
   } catch(e) { return { Page: { media: [] } }; }
 }
 
@@ -1655,19 +1638,13 @@ async function fetchRelated(id) {
   const cacheKey = `related_${id}`;
   const hit = cacheGet(cacheKey);
   if (hit) return hit;
-
   if (_apiSource === 'anilist') {
-    try {
-      const data = await cachedGql(cacheKey, `query($id:Int){Media(id:$id){recommendations(perPage:6){nodes{mediaRecommendation{id title{romaji english} coverImage{large} episodes averageScore status format}}}}}`,{id});
-      return data;
-    } catch(e) { /* fall through */ }
+    try { return await cachedGql(cacheKey, `query($id:Int){Media(id:$id){recommendations(perPage:6){nodes{mediaRecommendation{id title{romaji english} coverImage{large} episodes averageScore status format}}}}}`,{id}); }
+    catch(e) { /* fall through */ }
   }
-
   try {
     const json = await jikanFetch(`/anime/${id}/recommendations`);
-    const nodes = (json.data || []).slice(0,6).map(r => ({
-      mediaRecommendation: jikanToAnime(r.entry)
-    }));
+    const nodes = (json.data||[]).slice(0,6).map(r => ({ mediaRecommendation: jikanToAnime(r.entry) })).filter(n => n.mediaRecommendation);
     const result = { Media: { recommendations: { nodes } } };
     cacheSet(cacheKey, result);
     return result;
@@ -1678,14 +1655,10 @@ async function fetchAnimeById(id) {
   const cacheKey = `anime_${id}`;
   const hit = cacheGet(cacheKey);
   if (hit) return hit;
-
   if (_apiSource === 'anilist') {
-    try {
-      const data = await cachedGql(cacheKey, `query($id:Int){Media(id:$id){${FIELDS}}}`, {id});
-      return data;
-    } catch(e) { /* fall through */ }
+    try { return await cachedGql(cacheKey, `query($id:Int){Media(id:$id){${FIELDS}}}`, {id}); }
+    catch(e) { /* fall through */ }
   }
-
   try {
     const json = await jikanFetch(`/anime/${id}/full`);
     const result = { Media: jikanToAnime(json.data) };
@@ -1961,6 +1934,7 @@ function goToAnimeInfo() { if(heroList[currentHeroIdx]) openWatch(heroList[curre
 // ── Grid ──────────────────────────────────────────────────────────
 function renderGrid(list) {
   const grid = document.getElementById('animeGrid');
+  list = dedup(list); // remove any duplicate ids before rendering
   if (!list.length) { grid.innerHTML = '<p style="color:var(--muted);padding:2rem;grid-column:1/-1">No results found.</p>'; return; }
   grid.innerHTML = list.map(a => {
     const title = a.title.english||a.title.romaji;
