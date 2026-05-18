@@ -12,7 +12,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
-  import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+  import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup, sendEmailVerification } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
   import { getFirestore, doc, getDoc, setDoc, addDoc, collection, query, where, orderBy, onSnapshot, serverTimestamp, getDocs, updateDoc, increment } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
   import { getDatabase, ref, onValue, onDisconnect, set, remove, push } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-database.js";
 
@@ -33,7 +33,7 @@
   const rtdb = getDatabase(app);
   const googleProvider = new GoogleAuthProvider();
 
-  window.__fb = { auth, db, rtdb, ref, onValue, onDisconnect, set, remove, push, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup, googleProvider, doc, getDoc, setDoc, addDoc, collection, query, where, orderBy, onSnapshot, serverTimestamp, getDocs, updateDoc, increment };
+  window.__fb = { auth, db, rtdb, ref, onValue, onDisconnect, set, remove, push, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup, googleProvider, doc, getDoc, setDoc, addDoc, collection, query, where, orderBy, onSnapshot, serverTimestamp, getDocs, updateDoc, increment, sendEmailVerification };
 
   // ── MAINTENANCE MODE ──────────────────────────────────────────
   const maintDoc = doc(db, 'matience mode', 'matienceonoroff');
@@ -51,6 +51,16 @@
     window.updateAuthUI && window.updateAuthUI(user);
     if (user) {
       window.ensureUserProfile && window.ensureUserProfile(user);
+      // Show top banner if email not verified (Google accounts are auto-verified)
+      if (!user.emailVerified && user.providerData[0]?.providerId === 'password') {
+        window.showVerificationBanner && window.showVerificationBanner(user);
+      } else {
+        const b = document.getElementById('globalVerifBanner');
+        if (b) b.style.display = 'none';
+      }
+    } else {
+      const b = document.getElementById('globalVerifBanner');
+      if (b) b.style.display = 'none';
     }
   });
 
@@ -479,6 +489,45 @@ nav {
 .psg-num { font-size: 1.3rem; font-weight: 800; color: var(--accent); display: block; }
 .psg-label { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
 .profile-section-title { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin-bottom: 0.65rem; }
+.profile-section-title.mt { margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid var(--border); }
+.verif-banner {
+  display: flex; align-items: center; gap: 0.75rem;
+  background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.3);
+  border-radius: 10px; padding: 0.65rem 0.9rem; margin-bottom: 1rem; font-size: 0.82rem;
+}
+.verif-banner.ok { background: rgba(74,222,128,0.08); border-color: rgba(74,222,128,0.3); }
+.verif-banner-icon { font-size: 1rem; flex-shrink: 0; }
+.verif-banner-text { flex: 1; color: var(--text); line-height: 1.4; }
+.verif-banner-text span { color: var(--muted); display: block; font-size: 0.77rem; }
+.verif-resend-btn {
+  background: none; border: 1px solid rgba(251,191,36,0.4); color: #fbbf24;
+  border-radius: 6px; padding: 0.3rem 0.65rem; font-size: 0.78rem; font-weight: 600;
+  cursor: pointer; white-space: nowrap; transition: all 0.15s; flex-shrink: 0;
+}
+.verif-resend-btn:hover { background: rgba(251,191,36,0.12); }
+.verif-resend-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.settings-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.6rem 0; border-bottom: 1px solid var(--border);
+}
+.settings-row:last-child { border-bottom: none; }
+.settings-row-label { font-size: 0.88rem; font-weight: 600; color: var(--text); }
+.settings-row-sub { font-size: 0.75rem; color: var(--muted); margin-top: 0.1rem; }
+.settings-action-btn {
+  background: var(--surface); border: 1px solid var(--border); color: var(--text);
+  border-radius: 7px; padding: 0.35rem 0.75rem; font-size: 0.8rem; font-weight: 600;
+  cursor: pointer; transition: all 0.15s; white-space: nowrap; flex-shrink: 0;
+}
+.settings-action-btn:hover { border-color: var(--accent); color: var(--accent); }
+.settings-action-btn.danger { color: #f87171; border-color: rgba(248,113,113,0.3); }
+.settings-action-btn.danger:hover { background: rgba(248,113,113,0.08); }
+#globalVerifBanner {
+  display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+  background: linear-gradient(90deg, #92400e, #78350f);
+  border-bottom: 1px solid rgba(251,191,36,0.4);
+  padding: 0.5rem 1rem; text-align: center; font-size: 0.82rem; font-weight: 600; color: #fef3c7;
+}
+#globalVerifBanner a { color: #fbbf24; cursor: pointer; text-decoration: underline; margin-left: 0.5rem; }
 
 /* ── GENRE TABS ──────────────────────────────────────────────────── */
 .genre-bar {
@@ -817,6 +866,7 @@ nav {
 .toast.show { transform: translateY(0); opacity: 1; }
 .toast.success { border-left: 3px solid #4ade80; }
 .toast.error { border-left: 3px solid #ef4444; }
+.toast.info { border-left: 3px solid #60a5fa; }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
@@ -841,6 +891,11 @@ nav {
 <body>
 
 <!-- DAILY STATUS BANNER -->
+<div id="globalVerifBanner">
+  ✉️ Please verify your email address to unlock all features.
+  <a onclick="resendVerificationEmail()">Resend email</a>
+  <a onclick="document.getElementById('globalVerifBanner').style.display='none'" style="margin-left:1rem;color:#fef3c7">Dismiss</a>
+</div>
 <div id="daily-status-banner">
   <div class="dsb-inner">
     <span class="dsb-icon">🌸</span>
@@ -1134,7 +1189,7 @@ nav {
 
 <!-- PROFILE MODAL -->
 <div class="modal-overlay" id="profileModal">
-  <div class="modal" style="width:420px;max-width:92vw">
+  <div class="modal" style="width:440px;max-width:92vw;max-height:88vh;overflow-y:auto">
     <button class="modal-close" onclick="closeProfileModal()">&#x2715;</button>
     <div class="modal-logo">
       <img class="modal-logo-img" src="icons/AniBlossom_text.svg" alt="AniBlossom"
@@ -1147,6 +1202,9 @@ nav {
       <div class="profile-username" id="profileUsername">Loading...</div>
       <div class="profile-member-since" id="profileMemberSince"></div>
     </div>
+
+    <!-- Email verification status -->
+    <div id="profileVerifBanner" style="display:none"></div>
 
     <div class="profile-stats-grid">
       <div class="psg-card">
@@ -1163,13 +1221,29 @@ nav {
       </div>
     </div>
 
-    <div class="profile-section-title">Settings</div>
+    <div class="profile-section-title">Account</div>
     <div class="form-group">
       <label>Username</label>
       <input type="text" id="profileUsernameInput" placeholder="Your display name">
     </div>
     <div class="modal-error" id="profileError"></div>
-    <button class="modal-submit" onclick="saveUsername()" style="margin-bottom:0.75rem">Save Username</button>
+    <button class="modal-submit" onclick="saveUsername()" style="margin-bottom:0.5rem">Save Username</button>
+
+    <div class="profile-section-title mt">Data &amp; Export</div>
+    <div class="settings-row">
+      <div>
+        <div class="settings-row-label">Export Watch List</div>
+        <div class="settings-row-sub">Download your watched anime as MyAnimeList XML</div>
+      </div>
+      <button class="settings-action-btn" onclick="exportMALXML()">Export MAL XML</button>
+    </div>
+    <div class="settings-row">
+      <div>
+        <div class="settings-row-label">Clear Watch History</div>
+        <div class="settings-row-sub">Removes your local continue-watching history</div>
+      </div>
+      <button class="settings-action-btn danger" onclick="confirmClearHistory()">Clear History</button>
+    </div>
 
     <div class="modal-support">
       Need help? <a href="mailto:support@aniblossom.me">support@aniblossom.me</a>
@@ -1893,6 +1967,19 @@ async function openProfileModal() {
   document.getElementById('profileMemberSince').textContent = user.metadata?.creationTime ? 'Member since ' + new Date(user.metadata.creationTime).toLocaleDateString('en-US', {month:'long', year:'numeric'}) : '';
   const history = getHistory();
   document.getElementById('profileWatched').textContent = history.length;
+
+  // Render email verification status
+  const verifBanner = document.getElementById('profileVerifBanner');
+  if (verifBanner) {
+    const isGoogle = user.providerData[0]?.providerId !== 'password';
+    if (isGoogle || user.emailVerified) {
+      verifBanner.innerHTML = `<div class="verif-banner ok"><span class="verif-banner-icon">✅</span><div class="verif-banner-text">Email verified<span>${user.email}</span></div></div>`;
+    } else {
+      verifBanner.innerHTML = `<div class="verif-banner"><span class="verif-banner-icon">⚠️</span><div class="verif-banner-text">Email not verified<span>${user.email}</span></div><button class="verif-resend-btn" id="resendBtn" onclick="resendVerificationEmail()">Resend</button></div>`;
+    }
+    verifBanner.style.display = 'block';
+  }
+
   const profile = await getUserProfile();
   if (profile) {
     document.getElementById('profileEpisodes').textContent = profile.episodesWatched || 0;
@@ -2662,9 +2749,14 @@ async function doRegister() {
     const cred = await fb.createUserWithEmailAndPassword(fb.auth, email, pass);
     await fb.updateProfile(cred.user, { displayName: name });
     window.__currentUser = cred.user;
+    // Send verification email (Firebase uses the template configured in console;
+    // set the custom sender to no-reply@aniblossom.me in Firebase Console →
+    // Authentication → Templates → Edit → Customize domain)
+    try { await fb.sendEmailVerification(cred.user); } catch(_) {}
     closeAuthModal();
-    showToast('Account created! Welcome to AniBlossom', 'success');
+    showToast('Account created! Check your email to verify your address.', 'success');
     updateAuthUI(cred.user);
+    window.showVerificationBanner && window.showVerificationBanner(cred.user);
   } catch(e) { showAuthError(e.message.replace('Firebase: ','').replace(/\(.*\)/,'')); }
 }
 
@@ -2752,6 +2844,160 @@ document.addEventListener('click', (e) => {
   if (wrap && !wrap.contains(e.target)) { closeProfileDropdown(); }
 });
 
+// ── Email verification ────────────────────────────────────────────
+window.showVerificationBanner = function(user) {
+  const b = document.getElementById('globalVerifBanner');
+  if (b && !user.emailVerified && user.providerData[0]?.providerId === 'password') {
+    b.style.display = 'block';
+  }
+};
+
+let _resendCooldown = false;
+async function resendVerificationEmail() {
+  const user = window.__currentUser;
+  const fb = window.__fb;
+  if (!user || !fb) return;
+  if (_resendCooldown) { showToast('Please wait a moment before resending.', 'error'); return; }
+  const btn = document.getElementById('resendBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  try {
+    await fb.sendEmailVerification(user);
+    _resendCooldown = true;
+    setTimeout(() => { _resendCooldown = false; }, 60000); // 1-min cooldown
+    showToast('Verification email sent! Check your inbox.', 'success');
+    if (btn) { btn.textContent = 'Sent ✓'; }
+  } catch(e) {
+    showToast('Could not send email: ' + e.message.replace('Firebase: ','').replace(/\(.*\)/,''), 'error');
+    if (btn) { btn.disabled = false; btn.textContent = 'Resend'; }
+  }
+}
+
+// ── MAL XML export ────────────────────────────────────────────────
+async function exportMALXML() {
+  const user = window.__currentUser;
+  const fb = window.__fb;
+
+  // Gather IDs — prefer Firestore watchedAnime, fall back to local history
+  let animeIds = [];
+  if (user && fb) {
+    try {
+      const snap = await fb.getDoc(fb.doc(fb.db, 'users', user.uid));
+      if (snap.exists()) animeIds = snap.data().watchedAnime || [];
+    } catch(_) {}
+  }
+  if (!animeIds.length) {
+    animeIds = getHistory().map(h => String(h.id));
+  }
+  if (!animeIds.length) {
+    showToast('No watch data found to export.', 'error');
+    return;
+  }
+
+  const total = animeIds.length;
+  showToast(`Building MAL XML for ${total} anime…`, 'info');
+
+  // Fetch Jikan metadata for each ID to get MAL-compatible data.
+  const entries = [];
+  let done = 0;
+  for (const rawId of animeIds) {
+    const id = parseInt(rawId, 10);
+    if (!id) continue;
+
+    // Check cache first — cacheGet returns the stored data object directly.
+    // Anime entries cached by fetchAnimeById are shaped { Media: {...} }.
+    let media = null;
+    const cached = cacheGet('anime_' + id);
+    if (cached && cached.Media && cached.Media.title) {
+      media = cached.Media;
+    }
+
+    if (!media) {
+      // Try Jikan by ID — rate-limited by jikanFetch automatically
+      try {
+        const json = await jikanFetch('/anime/' + id + '/full');
+        if (json.data) media = jikanToAnime(json.data);
+      } catch(_) {}
+    }
+
+    if (!media) continue;
+
+    done++;
+    // Update toast every 5 entries so the user sees progress
+    if (done % 5 === 0 || done === total) {
+      showToast(`Building MAL XML… ${done}/${total}`, 'info');
+    }
+
+    const malId = media._malId || id;
+    const title = media.title.english || media.title.romaji || 'Unknown';
+    const eps   = media.episodes || 0;
+    const score = media.averageScore ? Math.round(media.averageScore / 10) : 0;
+    const status = media.status === 'FINISHED' ? 'Completed' : 'Watching';
+    const year  = media.startDate?.year || '';
+    entries.push({ malId, title, eps, score, status, year });
+  }
+
+  if (!entries.length) {
+    showToast('Could not resolve any anime data. Try again when the API is available.', 'error');
+    return;
+  }
+
+  // Bug fix: escape XML special chars in username to prevent XML corruption
+  const rawUsername = user?.displayName || 'AniBlossom User';
+  const username = rawUsername.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const now = new Date().toISOString().split('T')[0];
+
+  const xmlRows = entries.map(e => `  <anime>
+    <series_animedb_id>${e.malId}</series_animedb_id>
+    <series_title><![CDATA[${e.title}]]></series_title>
+    <series_type>TV</series_type>
+    <series_episodes>${e.eps}</series_episodes>
+    <my_id>0</my_id>
+    <my_watched_episodes>${e.eps}</my_watched_episodes>
+    <my_start_date>${e.year || '0000'}-00-00</my_start_date>
+    <my_finish_date>0000-00-00</my_finish_date>
+    <my_score>${e.score}</my_score>
+    <my_status>${e.status}</my_status>
+    <my_rewatching>0</my_rewatching>
+    <my_rewatching_ep>0</my_rewatching_ep>
+    <my_last_updated>${Math.floor(Date.now()/1000)}</my_last_updated>
+    <my_tags></my_tags>
+  </anime>`).join('
+');
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<myanimelist>
+  <myinfo>
+    <user_name>${username}</user_name>
+    <user_export_type>1</user_export_type>
+    <user_total_anime>${entries.length}</user_total_anime>
+    <user_total_watching>0</user_total_watching>
+    <user_total_completed>${entries.filter(e=>e.status==='Completed').length}</user_total_completed>
+    <user_total_onhold>0</user_total_onhold>
+    <user_total_dropped>0</user_total_dropped>
+    <user_total_plantowatch>0</user_total_plantowatch>
+  </myinfo>
+${xmlRows}
+</myanimelist>`;
+
+  const blob = new Blob([xml], { type: 'application/xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'aniblossom-watchlist-' + now + '.xml';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  showToast(`Exported ${entries.length} anime to MAL XML!`, 'success');
+}
+
+// ── Clear history confirmation ─────────────────────────────────────
+function confirmClearHistory() {
+  if (confirm('Clear your local watch history? This cannot be undone.')) {
+    clearHistory();
+    showToast('Watch history cleared.', 'success');
+  }
+}
+
+// ── Sign out ──────────────────────────────────────────────────────
 async function doSignOut() {
   const fb = window.__fb;
   await fb.signOut(fb.auth);
