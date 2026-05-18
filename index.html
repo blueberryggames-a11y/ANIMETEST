@@ -1531,13 +1531,56 @@ function markAnilistDown() {
     _anilistDown = true;
     _anilistDownSince = Date.now();
     console.warn('[AniBlossom] AniList appears to be down. Using Jikan fallback. Will retry in 5 minutes.');
+    scheduleAnilistProbe();
   }
+}
+
+// Proactively probe AniList after the retry window. If it responds, upgrade
+// currentAnime from Jikan data to AniList data so Server 1/2 become usable.
+function scheduleAnilistProbe() {
+  setTimeout(async () => {
+    if (!_anilistDown) return; // already recovered via another call
+    try {
+      // Lightweight probe — fetch a single known anime
+      await tryAnilist(`query{Media(id:1){id}}`, {});
+      markAnilistUp();
+      showToast('AniList is back online!', 'success');
+      // If watching a Jikan-sourced anime, silently re-fetch the AniList version
+      if (currentAnime && currentAnime._source === 'jikan') {
+        try {
+          const data = await tryAnilist(`query($id:Int){Media(id:$id){${FIELDS}}}`, { id: currentAnime.id });
+          if (data && data.Media) {
+            currentAnime = data.Media;
+            cacheSet(`anime_${currentAnime.id}`, data);
+            // Offer to switch back to Server 1 now that AniList IDs are available
+            showToast('AniList restored — you can now switch to Server 1 or 2', 'success');
+          }
+        } catch(_) {}
+      }
+    } catch(e) {
+      // Still down — schedule another probe
+      scheduleAnilistProbe();
+    }
+  }, ANILIST_RETRY_MS);
 }
 
 function markAnilistUp() {
   if (_anilistDown) {
     _anilistDown = false;
     console.info('[AniBlossom] AniList is back online.');
+    // Flush any Jikan-sourced cache entries so the next open goes to AniList.
+    try {
+      Object.keys(localStorage)
+        .filter(k => k.startsWith('ab_cache_anime_'))
+        .forEach(k => {
+          try {
+            const v = JSON.parse(localStorage.getItem(k));
+            if (v && v.data && v.data.Media && v.data.Media._source === 'jikan') {
+              localStorage.removeItem(k);
+            }
+          } catch(_) {}
+        });
+    } catch(_) {}
   }
 }
 
@@ -1734,9 +1777,9 @@ async function fetchAnimeById(id, titleHint) {
   try {
     const json = await jikanFetch(`/anime/${id}/full`);
     if (json.data) {
-      const result = { Media: jikanToAnime(json.data) };
-      cacheSet(cacheKey, result);
-      return result;
+      // Do NOT cache Jikan results under the AniList ID — so when AniList
+      // recovers the next call goes to AniList fresh instead of hitting cache.
+      return { Media: jikanToAnime(json.data) };
     }
   } catch(e) { /* ID was not a valid MAL ID — fall through */ }
 
@@ -1747,14 +1790,12 @@ async function fetchAnimeById(id, titleHint) {
       const entry = json.data && json.data[0];
       if (entry) {
         const media = jikanToAnime(entry);
-        // IMPORTANT: keep the original ID (AniList ID from history) so that
-        // updateHash writes the right URL and the history card keeps working.
+        // Keep the original ID (AniList ID) so the URL/hash stays correct.
         // Store the real MAL ID separately so Server 3 can use it if needed.
         media._malId = media.id;
         media.id = id;
-        const result = { Media: media };
-        cacheSet(cacheKey, result);
-        return result;
+        // Do NOT cache — so AniList recovery triggers a real re-fetch.
+        return { Media: media };
       }
     } catch(e) { /* search also failed */ }
   }
@@ -2221,22 +2262,36 @@ function loadPlayer(season, ep) {
   document.getElementById('dubToggle').style.display = getProvider(currentServer).supportsAudio ? 'flex' : 'none';
 }
 
-function switchServer(server) {
+async function switchServer(server) {
+  // If switching to Server 1/2 while currentAnime came from Jikan,
+  // try to re-fetch the AniList version now (AniList may have recovered).
+  if (currentAnime && currentAnime._source === 'jikan' && (server === 'filmu' || server === 'animplay')) {
+    showToast('Checking if AniList is back online…', 'info');
+    try {
+      const data = await tryAnilist(`query($id:Int){Media(id:$id){${FIELDS}}}`, { id: currentAnime.id });
+      if (data && data.Media) {
+        markAnilistUp();
+        currentAnime = data.Media;
+        cacheSet(`anime_${currentAnime.id}`, data);
+        showToast('AniList is back! Switched to ' + getProvider(server).name, 'success');
+      }
+    } catch(e) {
+      // AniList still down — block the switch, keep Server 3
+      showToast('AniList is still offline — Server 1/2 need it to work. Staying on Server 3.', 'error');
+      return;
+    }
+  }
+
   currentServer = server;
   ['srv-filmu', 'srv-animplay', 'srv-anistream'].forEach(id => {
     document.getElementById(id)?.classList.remove('active');
   });
   document.getElementById('srv-' + server)?.classList.add('active');
 
-  // FIX: warn about Jikan ID incompatibility on Server 1/2
-  if (currentAnime?._source === 'jikan' && (server === 'filmu' || server === 'animplay')) {
-    showToast('AniList is offline — this server may not work. Try Server 3 instead.', 'error');
-  }
-
   if (server === 'anistream') {
     document.getElementById('dubToggle').style.display = 'none';
     if (currentAnime) loadAnistreamPlayer(currentAnime, currentEp);
-    showToast('Switched to Server 3 (Best)', 'success');
+    if (currentAnime._source !== 'jikan') showToast('Switched to Server 3 (Best)', 'success');
   } else {
     hideAnistreamStatus();
     // Rebuild standard ep sidebar if we were on anistream
