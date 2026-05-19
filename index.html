@@ -887,76 +887,7 @@ nav {
   .ann-text { font-size: 0.75rem; }
 }
 
-/* ── POPUP ADS ───────────────────────────────────────────────────── */
-.popup-ad-overlay {
-  position: fixed; inset: 0;
-  background: rgba(13,13,18,0.7);
-  backdrop-filter: blur(4px);
-  z-index: 9000;
-  display: flex; align-items: center; justify-content: center;
-  animation: fadeIn 0.25s ease;
-}
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-@keyframes popupIn {
-  from { opacity: 0; transform: scale(0.92) translateY(12px); }
-  to   { opacity: 1; transform: scale(1) translateY(0); }
-}
-.popup-ad-box {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  width: min(420px, 92vw);
-  overflow: hidden;
-  position: relative;
-  box-shadow: 0 24px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(232,109,176,0.1);
-  animation: popupIn 0.3s cubic-bezier(0.34,1.56,0.64,1) both;
-}
-.popup-ad-label {
-  position: absolute; top: 10px; left: 12px;
-  font-size: 0.6rem; font-weight: 700; letter-spacing: 0.8px;
-  color: var(--muted); text-transform: uppercase;
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 4px; padding: 2px 6px; pointer-events: none;
-}
-.popup-ad-close {
-  position: absolute; top: 8px; right: 8px;
-  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
-  color: var(--text); border-radius: 50%;
-  width: 28px; height: 28px; font-size: 0.85rem;
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
-  transition: background 0.15s; z-index: 1; line-height: 1;
-}
-.popup-ad-close:hover { background: rgba(255,255,255,0.18); }
-.popup-ad-close-timer {
-  font-size: 0.65rem; font-weight: 800; color: var(--muted);
-}
-.popup-ad-content {
-  padding: 2.5rem 1.5rem 1.5rem;
-  display: flex; flex-direction: column; align-items: center;
-  text-align: center; gap: 1rem; cursor: pointer;
-  text-decoration: none; color: inherit;
-}
-.popup-ad-icon { font-size: 2.4rem; line-height: 1; }
-.popup-ad-title {
-  font-size: 1rem; font-weight: 800; color: var(--text);
-  line-height: 1.3;
-}
-.popup-ad-sub {
-  font-size: 0.82rem; color: var(--muted); line-height: 1.5;
-}
-.popup-ad-cta {
-  background: linear-gradient(135deg, var(--accent), var(--blossom2));
-  color: #fff; border: none; border-radius: 8px;
-  padding: 0.6rem 1.6rem; font-family: var(--font-body);
-  font-size: 0.9rem; font-weight: 700; cursor: pointer;
-  transition: opacity 0.15s; margin-top: 0.25rem;
-  display: flex; align-items: center; gap: 0.4rem;
-}
-.popup-ad-cta:hover { opacity: 0.88; }
-.popup-ad-cta svg { flex-shrink: 0; }
+/* popup-ad styles removed — card ads replaced by PopAds native popunders */
 </style>
 
 <script type="text/javascript" data-cfasync="false">
@@ -3203,163 +3134,43 @@ function timeAgo(d) {
 
 // ─────────────────────────────────────────────────────────────────
 // ADS
-// Popunders are handled by PopAds script in <head>.
-// This block handles the popup card ads only (max 3 per session).
+// PopAds (in <head>) handles popunders automatically on user click.
+// This block triggers an extra popunder when a user starts watching,
+// max once per 10 minutes so we don't hammer them.
 // ─────────────────────────────────────────────────────────────────
 (function() {
-  const MAX_CARDS = 6;
-  const CLOSE_DELAY = 5;
-  const CARD_KEY = 'ab_card_count';
-  const LAST_CARD_KEY = 'ab_card_last';
-  const AD_INDEX_KEY = 'ab_ad_index';
-  const MIN_GAP = 5 * 60 * 1000; // 5 mins between cards
+  const GAP_KEY = 'ab_pop_last';
+  const MIN_GAP = 10 * 60 * 1000; // 10 mins between manual triggers
 
-  const ADS = [
-    {
-      icon: '🎮',
-      title: 'Play Free Anime Games Online',
-      sub: 'Battle your favourite anime characters in this free browser game. No download needed!',
-      cta: 'Play Now',
-      url: 'https://www.crazygames.com'
-    },
-    {
-      icon: '🛍️',
-      title: 'Anime Merch — Up to 50% Off',
-      sub: 'Shop official figures, apparel and accessories from your favourite series.',
-      cta: 'Shop Now',
-      url: 'https://www.crunchyroll.com/store'
-    },
-    {
-      icon: '📚',
-      title: 'Read Manga Free',
-      sub: 'Catch up on the source material. Thousands of manga chapters available free.',
-      cta: 'Read Free',
-      url: 'https://mangaplus.shueisha.co.jp'
-    }
-  ];
-
-  const RESET_INTERVAL = 20 * 60 * 1000; // reset counter every 20 mins
-
-  // Count lives in sessionStorage — resets on every page load so timers restart fresh
-  // Last-shown timestamp lives in localStorage — persists across refreshes for MIN_GAP
-  function getCardCount() { return parseInt(sessionStorage.getItem(CARD_KEY) || '0', 10); }
-  function getNextAdIndex() { return parseInt(localStorage.getItem(AD_INDEX_KEY) || '0', 10); }
-  function incCardCount() {
-    sessionStorage.setItem(CARD_KEY, String(getCardCount() + 1));
-    localStorage.setItem(LAST_CARD_KEY, String(Date.now()));
-    localStorage.setItem(AD_INDEX_KEY, String((getNextAdIndex() + 1) % ADS.length));
-  }
-  function resetCardCount() {
-    sessionStorage.setItem(CARD_KEY, '0');
-  }
-  function canShowCard() {
-    if (getCardCount() >= MAX_CARDS) return false;
-    const last = parseInt(localStorage.getItem(LAST_CARD_KEY) || '0', 10);
-    if (last === 0) return true; // never shown before on this device
+  function canPop() {
+    const last = parseInt(localStorage.getItem(GAP_KEY) || '0', 10);
     return Date.now() - last >= MIN_GAP;
   }
-
-  // Always wipe the per-session count on every page load so all triggers fire fresh
-  sessionStorage.setItem(CARD_KEY, '0');
-
-  // Also reset mid-session every 20 mins
-  setInterval(() => {
-    if (!document.querySelector('.popup-ad-overlay')) resetCardCount();
-  }, RESET_INTERVAL);
-
-  function _buildAndShowAd() {
-    const ad = ADS[getNextAdIndex()];
-    incCardCount();
-
-    const overlay = document.createElement('div');
-    overlay.className = 'popup-ad-overlay';
-
-    let timeLeft = CLOSE_DELAY;
-    overlay.innerHTML = `
-      <div class="popup-ad-box">
-        <span class="popup-ad-label">Sponsored</span>
-        <button class="popup-ad-close" id="popupCloseBtn" disabled>
-          <span class="popup-ad-close-timer" id="popupTimer">${timeLeft}</span>
-        </button>
-        <a class="popup-ad-content" id="popupClickArea" href="${ad.url}" target="_blank" rel="noopener noreferrer">
-          <div class="popup-ad-icon">${ad.icon}</div>
-          <div class="popup-ad-title">${ad.title}</div>
-          <div class="popup-ad-sub">${ad.sub}</div>
-          <div class="popup-ad-cta">
-            ${ad.cta}
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 11L11 2M11 2H5M11 2v6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </div>
-        </a>
-      </div>`;
-
-    document.body.appendChild(overlay);
-
-    const timerEl = overlay.querySelector('#popupTimer');
-    const closeBtn = overlay.querySelector('#popupCloseBtn');
-    const ticker = setInterval(() => {
-      timeLeft--;
-      if (timeLeft <= 0) {
-        clearInterval(ticker);
-        timerEl.textContent = '✕';
-        closeBtn.disabled = false;
-        closeBtn.style.color = 'var(--text)';
-      } else {
-        timerEl.textContent = timeLeft;
-      }
-    }, 1000);
-
-    function dismiss() {
-      clearInterval(ticker);
-      if (clickCatcher.parentNode) clickCatcher.remove();
-      overlay.style.opacity = '0';
-      overlay.style.transition = 'opacity 0.2s';
-      setTimeout(() => overlay.remove(), 200);
+  function recordPop() {
+    localStorage.setItem(GAP_KEY, String(Date.now()));
+  }
+  function tryPop() {
+    if (!canPop()) return;
+    recordPop();
+    // PopAds exposes window.popns or triggers via a synthetic click on document
+    // Prefer their native API if loaded, otherwise fire a trusted click event
+    if (typeof window.popns === 'function') {
+      window.popns();
     }
-
-    // Invisible full-screen layer — any click anywhere opens the ad then removes itself
-    const clickCatcher = document.createElement('div');
-    clickCatcher.style.cssText = 'position:fixed;inset:0;z-index:8999;cursor:pointer;';
-    document.body.appendChild(clickCatcher);
-    clickCatcher.addEventListener('click', () => {
-      window.open(ad.url, '_blank', 'noopener,noreferrer');
-      dismiss();
-    }, { once: true });
-
-    closeBtn.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); dismiss(); });
-    overlay.querySelector('#popupClickArea').addEventListener('click', () => { window.open(ad.url, '_blank', 'noopener,noreferrer'); dismiss(); });
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay && !closeBtn.disabled) { window.open(ad.url, '_blank', 'noopener,noreferrer'); dismiss(); }
-    });
   }
 
-  function showCardAd() {
-    if (!canShowCard()) return;
-    _buildAndShowAd();
-  }
-
-  // Trigger 1: 8s after load
-  setTimeout(() => { if (canShowCard()) showCardAd(); }, 8000);
-
-  // Trigger 2: 8s after user starts watching an episode
+  // Trigger when user navigates to a watch page
   window.addEventListener('hashchange', () => {
     if (location.hash.startsWith('#/watch/')) {
-      setTimeout(() => { if (canShowCard()) showCardAd(); }, 8000);
+      // Small delay so it feels natural, not instant
+      setTimeout(tryPop, 3000);
     }
   });
 
-  // Trigger 3: 5 minutes into session
-  setTimeout(() => { if (canShowCard()) showCardAd(); }, 5 * 60 * 1000);
-
-  // Trigger 4: 10 minutes into session
-  setTimeout(() => { if (canShowCard()) showCardAd(); }, 10 * 60 * 1000);
-
-  // Public: showCardAd() respects limits; __showPopupAdForce() bypasses for testing
-  window.__showPopupAd = showCardAd;
-  window.__showPopupAdForce = function() {
-    resetCardCount();
-    localStorage.removeItem(LAST_CARD_KEY);
-    _buildAndShowAd();
-  };
+  // Also try once on initial load if already on a watch page
+  if (location.hash.startsWith('#/watch/')) {
+    setTimeout(tryPop, 5000);
+  }
 })();
 
 // ─────────────────────────────────────────────────────────────────
