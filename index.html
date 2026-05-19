@@ -3211,6 +3211,7 @@ function timeAgo(d) {
   const CLOSE_DELAY = 5;
   const CARD_KEY = 'ab_card_count';
   const LAST_CARD_KEY = 'ab_card_last';
+  const AD_INDEX_KEY = 'ab_ad_index';
   const MIN_GAP = 5 * 60 * 1000; // 5 mins between cards
 
   const ADS = [
@@ -3242,9 +3243,11 @@ function timeAgo(d) {
   // Count lives in sessionStorage — resets on every page load so timers restart fresh
   // Last-shown timestamp lives in localStorage — persists across refreshes for MIN_GAP
   function getCardCount() { return parseInt(sessionStorage.getItem(CARD_KEY) || '0', 10); }
+  function getNextAdIndex() { return parseInt(localStorage.getItem(AD_INDEX_KEY) || '0', 10); }
   function incCardCount() {
     sessionStorage.setItem(CARD_KEY, String(getCardCount() + 1));
     localStorage.setItem(LAST_CARD_KEY, String(Date.now()));
+    localStorage.setItem(AD_INDEX_KEY, String((getNextAdIndex() + 1) % ADS.length));
   }
   function resetCardCount() {
     sessionStorage.setItem(CARD_KEY, '0');
@@ -3265,7 +3268,7 @@ function timeAgo(d) {
   }, RESET_INTERVAL);
 
   function _buildAndShowAd() {
-    const ad = ADS[getCardCount() % ADS.length];
+    const ad = ADS[getNextAdIndex()];
     incCardCount();
 
     const overlay = document.createElement('div');
