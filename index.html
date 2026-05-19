@@ -890,11 +890,31 @@ nav {
 /* popup-ad styles removed — card ads replaced by PopAds native popunders */
 </style>
 
+<!-- PopAds.net Popunder Code -->
 <script type="text/javascript" data-cfasync="false">
 /*<![CDATA[/* */
-(function(){var e=window,m="cf2e47bb8aaae1751e8700b0dc876970",w=[["siteId",473*307+88+246+5155490],["minBid",0],["popundersPerIP","0"],["delayBetween",0],["default",false],["defaultPerDay",0],["topmostLayer","auto"]],u=["d3d3LmFudGlhZGJsb2Nrc3lzdGVtcy5jb20va3RhZy1pdC5taW4uY3Nz","ZDNjb2Q4MHRobjdxbmQuY2xvdWRmcm9udC5uZXQvQm5RYS9ybW90YS5taW4uanM="],l=-1,x,v,q=function(){clearTimeout(v);l++;if(u[l]&&!(1805068217000<(new Date).getTime()&&1<l)){x=e.document.createElement("script");x.type="text/javascript";x.async=!0;var c=e.document.getElementsByTagName("script")[0];x.src="https://"+atob(u[l]);x.crossOrigin="anonymous";x.onerror=q;x.onload=function(){clearTimeout(v);e[m.slice(0,16)+m.slice(0,16)]||q()};v=setTimeout(q,5E3);c.parentNode.insertBefore(x,c)}};if(!e[m]){try{Object.freeze(e[m]=w)}catch(e){}q()}})();
+var _pop = _pop || [];
+_pop.push(['siteId', 5301035]);
+_pop.push(['minBid', 0]);
+_pop.push(['popundersPerIP', 1]);
+_pop.push(['delayBetween', 60]);
+_pop.push(['default', true]);
+_pop.push(['defaultPerDay', 3]);
+_pop.push(['topmostLayer', true]);
+(function() {
+  var pa = document.createElement('script'); pa.type = 'text/javascript'; pa.async = true;
+  var s = document.getElementsByTagName('script')[0];
+  pa.src = '//c1.popads.net/pop.js';
+  pa.onerror = function() {
+    var sa = document.createElement('script'); sa.type = 'text/javascript'; sa.async = true;
+    sa.src = '//c2.popads.net/pop.js';
+    s.parentNode.insertBefore(sa, s);
+  };
+  s.parentNode.insertBefore(pa, s);
+})();
 /*]]>/* */
 </script>
+<!-- PopAds.net Popunder Code End -->
 </head>
 <body>
 
@@ -3133,45 +3153,8 @@ function timeAgo(d) {
 
 
 // ─────────────────────────────────────────────────────────────────
-// ADS
-// PopAds (in <head>) handles popunders automatically on user click.
-// This block triggers an extra popunder when a user starts watching,
-// max once per 10 minutes so we don't hammer them.
+// ADS — PopAds fires automatically on any user click via pop.js
 // ─────────────────────────────────────────────────────────────────
-(function() {
-  const GAP_KEY = 'ab_pop_last';
-  const MIN_GAP = 10 * 60 * 1000; // 10 mins between manual triggers
-
-  function canPop() {
-    const last = parseInt(localStorage.getItem(GAP_KEY) || '0', 10);
-    return Date.now() - last >= MIN_GAP;
-  }
-  function recordPop() {
-    localStorage.setItem(GAP_KEY, String(Date.now()));
-  }
-  function tryPop() {
-    if (!canPop()) return;
-    recordPop();
-    // PopAds exposes window.popns or triggers via a synthetic click on document
-    // Prefer their native API if loaded, otherwise fire a trusted click event
-    if (typeof window.popns === 'function') {
-      window.popns();
-    }
-  }
-
-  // Trigger when user navigates to a watch page
-  window.addEventListener('hashchange', () => {
-    if (location.hash.startsWith('#/watch/')) {
-      // Small delay so it feels natural, not instant
-      setTimeout(tryPop, 3000);
-    }
-  });
-
-  // Also try once on initial load if already on a watch page
-  if (location.hash.startsWith('#/watch/')) {
-    setTimeout(tryPop, 5000);
-  }
-})();
 
 // ─────────────────────────────────────────────────────────────────
 // INIT
