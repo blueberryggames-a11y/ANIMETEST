@@ -36,14 +36,28 @@
   window.__fb = { auth, db, rtdb, ref, onValue, onDisconnect, set, remove, push, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup, googleProvider, doc, getDoc, setDoc, addDoc, collection, query, where, orderBy, onSnapshot, serverTimestamp, getDocs, updateDoc, increment, sendEmailVerification };
 
   // ── MAINTENANCE MODE ──────────────────────────────────────────
-  const maintDoc = doc(db, 'matience mode', 'matienceonoroff');
-  onSnapshot(maintDoc, (snap) => {
-    const inMaintenance = snap.exists() && snap.data().matienceonoroff === true;
-    document.getElementById('maintenance-overlay').style.display = inMaintenance ? 'flex' : 'none';
-    document.getElementById('app').style.display = inMaintenance ? 'none' : 'block';
-  }, () => {
-    document.getElementById('app').style.display = 'block';
-  });
+  // Maintenance mode — uses a short-lived listener with exponential backoff
+  // retry to avoid the spammy WebChannel errors in the console.
+  let _maintRetryDelay = 2000;
+  let _maintUnsub = null;
+
+  function _startMaintListener() {
+    const maintDoc = doc(db, 'matience mode', 'matienceonoroff');
+    _maintUnsub = onSnapshot(maintDoc, (snap) => {
+      _maintRetryDelay = 2000; // reset on success
+      const inMaintenance = snap.exists() && snap.data().matienceonoroff === true;
+      document.getElementById('maintenance-overlay').style.display = inMaintenance ? 'flex' : 'none';
+      document.getElementById('app').style.display = inMaintenance ? 'none' : 'block';
+    }, (err) => {
+      // On error (400, QUIC reset, etc.) show app and retry with backoff
+      document.getElementById('app').style.display = 'block';
+      document.getElementById('maintenance-overlay').style.display = 'none';
+      if (_maintUnsub) { try { _maintUnsub(); } catch(_) {} }
+      _maintRetryDelay = Math.min(_maintRetryDelay * 2, 60000);
+      setTimeout(_startMaintListener, _maintRetryDelay);
+    });
+  }
+  _startMaintListener();
 
   // ── AUTH STATE ────────────────────────────────────────────────
   onAuthStateChanged(auth, user => {
@@ -65,27 +79,86 @@
   });
 
   // ── LIVE VIEWER PRESENCE ──────────────────────────────────────
+  // Uses a stable session key stored in sessionStorage so that
+  // reconnects (QUIC resets, tab backgrounding, etc.) don't create
+  // duplicate "ghost" entries for the same tab.
   const connectedRef = ref(rtdb, '.info/connected');
-  const visitorsRef = ref(rtdb, 'visitors');
+  const visitorsRef  = ref(rtdb, 'visitors');
+
+  // Give this tab a stable ID for its lifetime
+  let _sessionKey = sessionStorage.getItem('ab_rtdb_key');
+  if (!_sessionKey) {
+    _sessionKey = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    sessionStorage.setItem('ab_rtdb_key', _sessionKey);
+  }
+  const myVisitorRef = ref(rtdb, 'visitors/' + _sessionKey);
+
+  let _presenceRegistered = false;
 
   onValue(connectedRef, (snap) => {
     if (snap.val() === true) {
-      const myRef = push(visitorsRef);
-      onDisconnect(myRef).remove();
-      set(myRef, true);
+      // Always re-register onDisconnect after reconnect
+      onDisconnect(myVisitorRef).remove();
+      _presenceRegistered = true;
+      // set() with a timestamp so stale entries can be detected
+      set(myVisitorRef, { ts: Date.now() });
+    } else {
+      // Connection lost — reset flag so we re-register on reconnect
+      _presenceRegistered = false;
     }
   });
 
+  // Purge stale entries older than 2 minutes (guards against crashed tabs
+  // where onDisconnect didn't fire — e.g. hard refresh, browser crash).
+  const STALE_MS = 2 * 60 * 1000;
+
   onValue(visitorsRef, (snap) => {
-    const count = snap.exists() ? Object.keys(snap.val()).length : 0;
-    const el = document.getElementById('liveViewerCount');
-    if (el) {
-      el.textContent = count >= 1000 ? (count / 1000).toFixed(1) + 'k' : count;
-      el.closest('.live-counter')?.classList.remove('pulse');
-      void el.closest('.live-counter')?.offsetWidth;
-      el.closest('.live-counter')?.classList.add('pulse');
+    if (!snap.exists()) {
+      _updateLiveCount(0);
+      return;
     }
+    const now = Date.now();
+    const val = snap.val();
+    let count = 0;
+    const staleKeys = [];
+
+    Object.entries(val).forEach(([k, v]) => {
+      const ts = (typeof v === 'object' && v !== null) ? (v.ts || 0) : 0;
+      if (ts && now - ts > STALE_MS) {
+        staleKeys.push(k);
+      } else {
+        count++;
+      }
+    });
+
+    // Clean up stale entries silently (safety net for crashed tabs)
+    staleKeys.forEach(k => {
+      try { set(ref(rtdb, 'visitors/' + k), null); } catch(_) {}
+    });
+
+    _updateLiveCount(count);
   });
+
+  function _updateLiveCount(count) {
+    // Update both possible counter elements (home + watch view)
+    document.querySelectorAll('#liveViewerCount').forEach(el => {
+      el.textContent = count >= 1000 ? (count / 1000).toFixed(1) + 'k' : count;
+      const lc = el.closest('.live-counter');
+      if (lc) {
+        lc.classList.remove('pulse');
+        void lc.offsetWidth; // force reflow
+        lc.classList.add('pulse');
+      }
+    });
+  }
+
+  // Refresh our own timestamp every 90s so we don't get pruned
+  // by the stale-entry cleanup while we're still active.
+  setInterval(() => {
+    if (_presenceRegistered) {
+      set(myVisitorRef, { ts: Date.now() }).catch(() => {});
+    }
+  }, 90 * 1000);
 </script>
 
 <style>
