@@ -211,7 +211,7 @@ body::before {
 }
 @keyframes logoFloat {
   0%, 100% { transform: translateY(0px); }
-  50%       { transform: translateY(-3px); }
+  50%       { transform: translateY(0px); }
 }
 @keyframes fadeSlideIn {
   from { opacity: 0; transform: translateX(-8px); }
@@ -264,15 +264,6 @@ body::before {
 #announcement-bar.show {
   display: flex;
   animation: announcementSlide 0.4s cubic-bezier(0.34,1.56,0.64,1) both;
-}
-.ann-icon {
-  font-size: 0.95rem; flex-shrink: 0;
-  filter: drop-shadow(0 0 4px rgba(255,255,255,0.5));
-  animation: annPulse 2s ease-in-out infinite;
-}
-@keyframes annPulse {
-  0%,100% { transform: scale(1); }
-  50%      { transform: scale(1.2); }
 }
 .ann-text {
   flex: 1; text-align: center;
@@ -383,13 +374,11 @@ body::before {
 
 .logo-text-img {
   height: 28px; width: auto; object-fit: contain; flex-shrink: 0;
-  animation: logoEntrance 0.5s cubic-bezier(0.34,1.56,0.64,1) both,
-             logoFloat 4s ease-in-out 0.5s infinite;
+  animation: logoEntrance 0.5s cubic-bezier(0.34,1.56,0.64,1) both;
   filter: drop-shadow(0 0 8px rgba(232,109,176,0.4)); transition: filter 0.3s;
 }
 .logo-text-img:hover {
   filter: drop-shadow(0 0 16px rgba(232,109,176,0.8));
-  animation: logoEntrance 0s, logoFloat 4s ease-in-out infinite;
 }
 .logo-fallback {
   display: none; font-family: var(--font-display);
@@ -674,18 +663,34 @@ nav {
 .see-all { font-size: 0.78rem; color: var(--muted); text-decoration: none; cursor: pointer; transition: color 0.15s; font-weight: 600; }
 .see-all:hover { color: var(--accent); }
 
-.hist-row { display: flex; gap: 0.75rem; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; }
+.hist-row { display: flex; gap: 0.75rem; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; cursor: grab; }
+.hist-row:active { cursor: grabbing; }
 .hist-row::-webkit-scrollbar { display: none; }
 .hist-card { flex-shrink: 0; width: 160px; cursor: pointer; position: relative; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); transition: border-color 0.2s; }
 .hist-card:hover { border-color: var(--accent); }
 .hist-thumb { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; background: var(--card); }
 .hist-prog { position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: rgba(255,255,255,0.1); }
-.hist-prog-fill { height: 100%; background: var(--accent); }
+.hist-prog-fill { height: 100%; background: var(--accent); transition: width 0.3s; min-width: 4px; border-radius: 0 2px 2px 0; }
 .hist-ep-tag { position: absolute; top: 5px; left: 5px; background: rgba(13,13,18,0.85); border-radius: 4px; padding: 1px 6px; font-size: 0.7rem; font-weight: 700; }
 .hist-time-tag { position: absolute; bottom: 6px; right: 5px; background: rgba(13,13,18,0.85); border-radius: 3px; padding: 1px 5px; font-size: 0.68rem; color: var(--muted); }
 .hist-close { position: absolute; top: 4px; right: 4px; background: rgba(13,13,18,0.8); border: none; border-radius: 50%; width: 20px; height: 20px; color: var(--muted); cursor: pointer; font-size: 0.65rem; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s; }
 .hist-card:hover .hist-close { opacity: 1; }
 .hist-name { padding: 0.35rem 0.5rem; font-size: 0.78rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--card); }
+
+/* NEW EPISODES SECTION */
+.new-eps-bar { padding: 1rem 1.5rem 0.5rem; }
+.new-eps-row { display: flex; gap: 0.75rem; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; cursor: grab; }
+.new-eps-row:active { cursor: grabbing; }
+.new-eps-row::-webkit-scrollbar { display: none; }
+.nep-card { flex-shrink: 0; width: 175px; cursor: pointer; position: relative; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s; background: var(--card); }
+.nep-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 6px 20px rgba(232,109,176,0.15); }
+.nep-thumb { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; background: var(--card); }
+.nep-ep-badge { position: absolute; top: 5px; left: 5px; background: rgba(232,109,176,0.9); color: #fff; border-radius: 4px; padding: 1px 7px; font-size: 0.7rem; font-weight: 800; display: flex; align-items: center; gap: 4px; }
+.nep-ep-badge svg { width: 8px; height: 8px; flex-shrink: 0; }
+.nep-sub-badge { position: absolute; top: 5px; right: 5px; background: rgba(13,13,18,0.85); border-radius: 4px; padding: 1px 6px; font-size: 0.62rem; font-weight: 800; color: var(--muted); border: 1px solid var(--border); }
+.nep-time { position: absolute; bottom: 34px; left: 5px; background: rgba(13,13,18,0.82); border-radius: 3px; padding: 1px 6px; font-size: 0.65rem; color: var(--muted); display: flex; align-items: center; gap: 3px; }
+.nep-time svg { width: 8px; height: 8px; opacity: 0.7; flex-shrink: 0; }
+.nep-name { padding: 0.3rem 0.5rem; font-size: 0.78rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--card); }
 
 /* TABS BAR */
 .list-tabs { display: flex; align-items: center; gap: 0; padding: 1rem 1.5rem 0; border-bottom: 1px solid var(--border); margin: 0.5rem 0 0; }
@@ -1016,7 +1021,6 @@ nav {
 
 <!-- ANNOUNCEMENT BAR -->
 <div id="announcement-bar">
-  <span class="ann-icon">🌸</span>
   <span class="ann-text" id="announcementText"></span>
   <button class="ann-close" id="announcementClose" aria-label="Dismiss">&#x2715;</button>
 </div>
@@ -1036,8 +1040,8 @@ nav {
     <div class="search-dropdown" id="searchDropdown"></div>
   </div>
   <div class="nav-tabs">
-    <button class="ntab active" id="ntab-newest" onclick="switchTab('newest')">NEWEST</button>
-    <button class="ntab" id="ntab-popular" onclick="switchTab('popular')">POPULAR</button>
+    <button class="ntab" id="ntab-newest" onclick="switchTab('newest')">NEWEST</button>
+    <button class="ntab active" id="ntab-popular" onclick="switchTab('popular')">POPULAR</button>
     <button class="ntab" id="ntab-top" onclick="switchTab('top')">TOP RATED</button>
   </div>
   <div class="nav-right" id="navRight">
@@ -1103,6 +1107,14 @@ nav {
 
   <div class="home-body">
     <div class="home-main">
+      <!-- NEW EPISODES SECTION -->
+      <div class="new-eps-bar" id="newEpsSection" style="display:none">
+        <div class="section-hd">
+          <h2><strong>New Episodes</strong></h2>
+        </div>
+        <div class="new-eps-row" id="newEpsRow"></div>
+      </div>
+
       <div class="history-bar" id="historySection" style="display:none">
         <div class="section-hd">
           <h2><strong>Watch History</strong></h2>
@@ -1112,8 +1124,8 @@ nav {
       </div>
 
       <div class="list-tabs">
-        <button class="ltab active" id="ltab-newest" onclick="switchTab('newest')">Newest</button>
-        <button class="ltab" id="ltab-popular" onclick="switchTab('popular')">Popular</button>
+        <button class="ltab" id="ltab-newest" onclick="switchTab('newest')">Newest</button>
+        <button class="ltab active" id="ltab-popular" onclick="switchTab('popular')">Popular</button>
         <button class="ltab" id="ltab-top" onclick="switchTab('top')">Top Rated</button>
       </div>
 
@@ -1867,18 +1879,80 @@ async function fetchTopAiring() {
 }
 
 async function fetchSearch(q) {
+  // Build expanded queries for better fuzzy matching
+  // e.g. "shadow" → also try "eminence shadow", partial matches
+  const results = new Map();
+
+  const mergeResults = (list) => {
+    for (const item of list) {
+      if (item && item.id && !results.has(item.id)) {
+        results.set(item.id, item);
+      }
+    }
+  };
+
   if (isAnilistAvailable()) {
     try {
-      const data = await tryAnilist(`query($q:String){Page(perPage:8){media(type:ANIME,search:$q,isAdult:false){${FIELDS}}}}`, {q});
+      // Primary search
+      const data = await tryAnilist(
+        `query($q:String){Page(perPage:10){media(type:ANIME,search:$q,isAdult:false){${FIELDS}}}}`,
+        {q}
+      );
       markAnilistUp();
-      return data;
+      mergeResults(data.Page.media || []);
+
+      // If few results, also search with individual words for better coverage
+      if (results.size < 4 && q.length >= 3) {
+        const words = q.split(/\s+/).filter(w => w.length >= 3);
+        for (const word of words.slice(0, 2)) {
+          try {
+            const d2 = await tryAnilist(
+              `query($q:String){Page(perPage:8){media(type:ANIME,search:$q,isAdult:false){${FIELDS}}}}`,
+              {q: word}
+            );
+            mergeResults(d2.Page.media || []);
+          } catch(_) {}
+        }
+      }
     } catch(e) { markAnilistDown(); }
   }
 
+  // Always supplement with Jikan for better coverage
   try {
     const json = await jikanFetch(`/anime?q=${encodeURIComponent(q)}&limit=8&sfw=true`);
-    return { Page: { media: dedup((json.data||[]).map(jikanToAnime).filter(Boolean)) } };
-  } catch(e) { return { Page: { media: [] } }; }
+    const jikanItems = dedup((json.data || []).map(jikanToAnime).filter(Boolean));
+    // Only add Jikan items not already found by AniList (match by title)
+    const existingTitles = new Set([...results.values()].map(a =>
+      (a.title.english || a.title.romaji || '').toLowerCase()
+    ));
+    for (const item of jikanItems) {
+      const t = (item.title.english || item.title.romaji || '').toLowerCase();
+      if (!existingTitles.has(t)) {
+        results.set('j_' + item.id, item);
+        existingTitles.add(t);
+      }
+    }
+  } catch(_) {}
+
+  // Sort: prioritise results where query words appear in the title
+  const qLower = q.toLowerCase();
+  const qWords = qLower.split(/\s+/).filter(Boolean);
+  const scored = [...results.values()].map(a => {
+    const title = (a.title.english || a.title.romaji || '').toLowerCase();
+    const native = (a.title.native || '').toLowerCase();
+    let score = 0;
+    if (title === qLower || native === qLower) score += 100;
+    if (title.startsWith(qLower)) score += 50;
+    if (title.includes(qLower)) score += 30;
+    for (const w of qWords) {
+      if (title.includes(w)) score += 10;
+    }
+    score += (a.averageScore || 0) / 100;
+    return { a, score };
+  });
+  scored.sort((x, y) => y.score - x.score);
+
+  return { Page: { media: scored.slice(0, 10).map(s => s.a) } };
 }
 
 async function fetchRelated(id, isJikanSource) {
@@ -2115,7 +2189,7 @@ async function saveUsername() {
 // STATE
 // ─────────────────────────────────────────────────────────────────
 let heroList = [], currentHeroIdx = 0, heroTimer = null;
-let currentTab = 'newest', currentPage = 1, currentGenre = null;
+let currentTab = 'popular', currentPage = 1, currentGenre = null;
 let currentAnime = null, currentEp = 1, currentSeason = 1, totalEps = 0;
 let currentServer = 'filmu';
 let currentDub = 'sub';
@@ -2190,6 +2264,7 @@ function addHistory(anime, ep) {
     title: anime.title.english||anime.title.romaji,
     img: anime.coverImage.large,
     ep,
+    totalEps: anime.episodes || 0,
     _source: anime._source || 'anilist'  // FIX: track the source
   });
   if (h.length > 12) h = h.slice(0,12);
@@ -2204,13 +2279,20 @@ function renderHistory() {
   const sec = document.getElementById('historySection');
   if (!h.length) { sec.style.display = 'none'; return; }
   sec.style.display = 'block';
-  document.getElementById('histRow').innerHTML = h.map((x,i) => `
+  document.getElementById('histRow').innerHTML = h.map((x,i) => {
+    // Calculate progress: use stored totalEps if available, else estimate from ep
+    const totalEps = x.totalEps || 0;
+    const pct = (totalEps > 0) ? Math.min(100, Math.round((x.ep / totalEps) * 100)) : 0;
+    const showBar = pct > 0;
+    return `
     <div class="hist-card" onclick="openFromHistory(${i})">
       <img class="hist-thumb" src="${x.img}" alt="${escHtml(x.title)}" loading="lazy">
       <div class="hist-ep-tag">EP ${x.ep}</div>
       <div class="hist-close" onclick="event.stopPropagation();removeHistory(${x.id})">&#x2715;</div>
+      ${showBar ? `<div class="hist-prog"><div class="hist-prog-fill" style="width:${pct}%"></div></div>` : ''}
       <div class="hist-name">${escHtml(x.title)}</div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function removeHistory(id) {
@@ -2346,6 +2428,70 @@ async function loadHome(withHero=false) {
   ]);
   renderGrid(listData.Page.media);
   renderPagination(currentPage);
+}
+
+// ─────────────────────────────────────────────────────────────────
+// NEW EPISODES
+// ─────────────────────────────────────────────────────────────────
+async function fetchNewEpisodes() {
+  const cacheKey = 'new_episodes';
+  const hit = cacheGet(cacheKey);
+  if (hit) return hit;
+
+  if (isAnilistAvailable()) {
+    try {
+      const data = await tryAnilist(`query{Page(perPage:20){media(type:ANIME,status:RELEASING,sort:UPDATED_AT_DESC,isAdult:false){id title{romaji english} coverImage{large extraLarge} episodes nextAiringEpisode{episode timeUntilAiring} averageScore format}}}`);
+      markAnilistUp();
+      cacheSet(cacheKey, data);
+      return data;
+    } catch(e) { markAnilistDown(); }
+  }
+
+  try {
+    const json = await jikanFetch('/top/anime?filter=airing&limit=20');
+    const result = { Page: { media: dedup((json.data||[]).map(jikanToAnime).filter(Boolean)) } };
+    cacheSet(cacheKey, result);
+    return result;
+  } catch(e) { return { Page: { media: [] } }; }
+}
+
+function renderNewEpisodes(list) {
+  const sec = document.getElementById('newEpsSection');
+  const row = document.getElementById('newEpsRow');
+  if (!list || !list.length) { sec.style.display = 'none'; return; }
+
+  row.innerHTML = list.slice(0, 15).map(a => {
+    const title = a.title.english || a.title.romaji;
+    const img = a.coverImage && (a.coverImage.large || a.coverImage.extraLarge) || '';
+    const nextEp = a.nextAiringEpisode;
+    const latestEp = nextEp ? Math.max(1, nextEp.episode - 1) : (a.episodes || '?');
+    let timeLabel = '';
+    if (nextEp && nextEp.timeUntilAiring) {
+      const sinceLastSecs = (7 * 24 * 3600) - nextEp.timeUntilAiring;
+      if (sinceLastSecs > 0) {
+        const h = Math.floor(sinceLastSecs / 3600);
+        const d = Math.floor(h / 24);
+        if (d >= 1) timeLabel = d + 'd ago';
+        else if (h >= 1) timeLabel = h + ' hour' + (h===1?'':'s') + ' ago';
+        else timeLabel = 'just now';
+      }
+    }
+    const subBadge = a.format === 'MOVIE' ? 'MOVIE' : 'SUB';
+    const safeA = JSON.stringify(a).replace(/"/g,'&quot;');
+    return '<div class="nep-card" onclick=\'openWatch(' + safeA + ')\'>' +
+      '<img class="nep-thumb" src="' + escHtml(img) + '" alt="' + escHtml(title) + '" loading="lazy">' +
+      '<div class="nep-ep-badge">' +
+        '<svg viewBox="0 0 8 8" fill="currentColor"><circle cx="4" cy="4" r="3"/></svg>' +
+        'EP ' + latestEp +
+      '</div>' +
+      '<div class="nep-sub-badge">' + escHtml(subBadge) + '</div>' +
+      (timeLabel ? '<div class="nep-time">' +
+        '<svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5" cy="5" r="4"/><path d="M5 2.5V5l2 1.5"/></svg>' +
+        escHtml(timeLabel) + '</div>' : '') +
+      '<div class="nep-name">' + escHtml(title) + '</div>' +
+    '</div>';
+  }).join('');
+  sec.style.display = 'block';
 }
 
 async function loadSidebar() {
@@ -3210,15 +3356,45 @@ function timeAgo(d) {
 // ─────────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────
+// HORIZONTAL SCROLL (wheel + drag) for hist-row and new-eps-row
+// ─────────────────────────────────────────────────────────────────
+function setupHScrollRow(el) {
+  if (!el) return;
+  // Mouse wheel → horizontal scroll
+  el.addEventListener('wheel', (e) => {
+    if (e.deltaY !== 0) {
+      e.preventDefault();
+      el.scrollLeft += e.deltaY * 1.5;
+    }
+  }, { passive: false });
+  // Click-drag
+  let isDown = false, startX = 0, scrollLeft = 0;
+  el.addEventListener('mousedown', (e) => {
+    isDown = true; startX = e.pageX - el.offsetLeft; scrollLeft = el.scrollLeft;
+  });
+  el.addEventListener('mouseleave', () => { isDown = false; });
+  el.addEventListener('mouseup', () => { isDown = false; });
+  el.addEventListener('mousemove', (e) => {
+    if (!isDown) return;
+    e.preventDefault();
+    const x = e.pageX - el.offsetLeft;
+    el.scrollLeft = scrollLeft - (x - startX);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────
 // INIT
 // ─────────────────────────────────────────────────────────────────
 (async () => {
+  setupHScrollRow(document.getElementById('histRow'));
+  setupHScrollRow(document.getElementById('newEpsRow'));
   renderHistory();
   showDailyBanner();
   await Promise.all([
     fetchTrending().then(d=>setHero(d.Page.media)),
     loadHome(false),
-    loadSidebar()
+    loadSidebar(),
+    fetchNewEpisodes().then(d=>renderNewEpisodes(d.Page.media))
   ]);
   await handleHashChange();
 })();
