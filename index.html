@@ -1470,7 +1470,7 @@ function dismissDailyBanner() {
 // ─────────────────────────────────────────────────────────────────
 // ANISTREAM CONFIG
 // ─────────────────────────────────────────────────────────────────
-const ANISTREAM_DEFAULT = 'https://myapi-psi-wheat.vercel.app';
+const ANISTREAM_DEFAULT = 'https://myapi-fixed.vercel.app';
 
 function getAnistreamBase() {
   return localStorage.getItem('anistream_worker') || ANISTREAM_DEFAULT;
@@ -1520,9 +1520,12 @@ async function anistreamFetchEpisodes(animeSession) {
   }));
 }
 
-function anistreamEmbedUrl(animeSession, epSession, title) {
+function anistreamEmbedUrl(animeSession, epSession, title, malId, epNum) {
   const base = getAnistreamBase();
-  return `${base}/embed?anime_session=${encodeURIComponent(animeSession)}&episode_session=${encodeURIComponent(epSession)}&title=${encodeURIComponent(title || '')}`;
+  let url = `${base}/embed?anime_session=${encodeURIComponent(animeSession)}&episode_session=${encodeURIComponent(epSession)}&title=${encodeURIComponent(title || '')}`;
+  if (malId)  url += `&mal_id=${encodeURIComponent(malId)}`;
+  if (epNum)  url += `&ep_num=${encodeURIComponent(epNum)}`;
+  return url;
 }
 
 async function loadAnistreamPlayer(anime, epNumber) {
@@ -1548,7 +1551,8 @@ async function loadAnistreamPlayer(anime, epNumber) {
                || anistreamEpData[0];
     if (!epObj) throw new Error(`Episode ${epNumber} not found on Server 3`);
     const epLabel = `${title} — Episode ${epObj.number}`;
-    document.getElementById('playerIframe').src = anistreamEmbedUrl(anistreamAnimeSession, epObj.session, epLabel);
+    const _malId = anime._malId || anime.id || '';
+    document.getElementById('playerIframe').src = anistreamEmbedUrl(anistreamAnimeSession, epObj.session, epLabel, _malId, epObj.number);
     setAnistreamStatus('ok', `Server 3 · ${anistreamEpData.length} eps`);
     const nextEp = anistreamEpData.find(e => e.number === epNumber + 1);
     if (nextEp) {
@@ -1613,7 +1617,8 @@ function selectEpAnistream(epNumber) {
   const epObj = anistreamEpData.find(e => e.number === epNumber);
   if (!epObj) { showToast('Episode not available on Server 3', 'error'); return; }
   const epLabel = `${title} — Episode ${epNumber}`;
-  document.getElementById('playerIframe').src = anistreamEmbedUrl(anistreamAnimeSession, epObj.session, epLabel);
+  const _malId = currentAnime ? (currentAnime._malId || currentAnime.id || '') : '';
+  document.getElementById('playerIframe').src = anistreamEmbedUrl(anistreamAnimeSession, epObj.session, epLabel, _malId, epNumber);
   document.querySelectorAll('.ep-item').forEach(el => el.classList.remove('active'));
   const el = document.getElementById('ep-item-' + epNumber);
   if (el) { el.classList.add('active'); el.scrollIntoView({ block: 'nearest' }); }
