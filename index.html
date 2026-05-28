@@ -1512,10 +1512,12 @@ async function anistreamFindSession(anime) {
 
 async function anistreamFetchEpisodes(animeSession) {
   const eps = await anistreamFetch('/episodes?session=' + encodeURIComponent(animeSession));
+  // Always use index+1 as the episode number — the API's ep.number can be
+  // 0-based or offset (e.g. returns ep 2 for what should be ep 1).
   return eps.map((ep, i) => ({
-    number:   ep.number   || (i + 1),
+    number:   i + 1,
     session:  ep.session,
-    title:    ep.title    || `Episode ${ep.number || i + 1}`,
+    title:    ep.title    || `Episode ${i + 1}`,
     snapshot: ep.snapshot || null,
   }));
 }
