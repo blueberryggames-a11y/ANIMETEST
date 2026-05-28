@@ -1662,7 +1662,7 @@ function hideAnistreamStatus() {
 //   Server 1/2 compatibility when using Jikan IDs.
 // ─────────────────────────────────────────────────────────────────
 const AL = 'https://graphql.anilist.co';
-const FIELDS = `id title{romaji english native} coverImage{large extraLarge} bannerImage description(asHtml:false) episodes averageScore genres status startDate{year} format studios{nodes{name}} nextAiringEpisode{episode}`;
+const FIELDS = `id idMal title{romaji english native} coverImage{large extraLarge} bannerImage description(asHtml:false) episodes averageScore genres status startDate{year} format studios{nodes{name}} nextAiringEpisode{episode}`;
 
 const JIKAN = 'https://api.jikan.moe/v4';
 
@@ -2524,6 +2524,8 @@ async function loadSidebar() {
 // ─────────────────────────────────────────────────────────────────
 function openWatch(anime, ep=1) {
   if (typeof anime === 'string') anime = JSON.parse(anime);
+  // Normalise _malId: prefer idMal from AniList, fall back to existing _malId, last resort use id
+  if (!anime._malId) anime._malId = anime.idMal || anime.id;
   currentAnime = anime;
   currentEp = ep;
   currentSeason = 1;
