@@ -13,7 +13,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
   import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-  import { getFirestore, doc, getDoc, setDoc, addDoc, collection, query, where, orderBy, onSnapshot, serverTimestamp, getDocs, updateDoc, increment } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+  import { getFirestore, doc, getDoc, setDoc, addDoc, collection, query, where, orderBy, onSnapshot, serverTimestamp, getDocs, updateDoc, increment, arrayUnion, arrayRemove, deleteField } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
   import { getDatabase, ref, onValue, onDisconnect, set, remove, push } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-database.js";
 
   const firebaseConfig = {
@@ -33,7 +33,7 @@
   const rtdb = getDatabase(app);
   const googleProvider = new GoogleAuthProvider();
 
-  window.__fb = { auth, db, rtdb, ref, onValue, onDisconnect, set, remove, push, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup, googleProvider, doc, getDoc, setDoc, addDoc, collection, query, where, orderBy, onSnapshot, serverTimestamp, getDocs, updateDoc, increment };
+  window.__fb = { auth, db, rtdb, ref, onValue, onDisconnect, set, remove, push, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile, GoogleAuthProvider, signInWithPopup, googleProvider, doc, getDoc, setDoc, addDoc, collection, query, where, orderBy, onSnapshot, serverTimestamp, getDocs, updateDoc, increment, arrayUnion, arrayRemove, deleteField };
 
   // ── MAINTENANCE MODE ──────────────────────────────────────────
   // Maintenance mode — uses a short-lived listener with exponential backoff
@@ -5081,9 +5081,16 @@ function renderComments(animeId, ep) {
     </div>
     ${user ? `
     <div class="comment-form">
-      <div class="comment-avatar" id="cmtAvatarEl">${user.photoURL
-        ? `<img src="${escHtml(user.photoURL)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.style.display='none'">`
-        : (user.displayName ? escHtml(user.displayName[0].toUpperCase()) : 'A')}</div>
+      <div class="comment-avatar" id="cmtAvatarEl" style="overflow:hidden;">${(() => {
+        const savedIdx = parseInt(localStorage.getItem('ab_profile_avatar') ?? '-1', 10);
+        if (savedIdx >= 0 && PP_AVATAR_URLS[savedIdx]) {
+          return `<img src="${PP_AVATAR_URLS[savedIdx]}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.style.display='none'">`;
+        }
+        if (user.photoURL) {
+          return `<img src="${escHtml(user.photoURL)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.style.display='none'">`;
+        }
+        return user.displayName ? escHtml(user.displayName[0].toUpperCase()) : 'A';
+      })()}</div>
       <div class="comment-input-wrap">
         <div class="comment-textarea-box">
           <textarea id="commentTextarea" placeholder="Write a comment..." maxlength="${MAX_CHARS}" oninput="cmtUpdateCount(this)"></textarea>
@@ -5112,6 +5119,112 @@ function renderComments(animeId, ep) {
       </div>
     </div>`;
 
+  // Avatar cache: uid -> avatarIdx (populated lazily)
+  const _cmtAvatarCache = {};
+  async function _fetchAvatarIdx(uid) {
+    if (!uid) return -1;
+    if (typeof _cmtAvatarCache[uid] === 'number') return _cmtAvatarCache[uid];
+    try {
+      const snap = await fb.getDoc(fb.doc(fb.db, 'users', uid));
+      const idx = snap.exists() && typeof snap.data().avatarIdx === 'number' ? snap.data().avatarIdx : -1;
+      _cmtAvatarCache[uid] = idx;
+      return idx;
+    } catch(e) { return -1; }
+  }
+
+  function _buildCommentHTML(d, aidxMap, commentKey) {
+    const c = d.data();
+    const docId = d.id;
+    const t = c.createdAt?.toDate ? timeAgo(c.createdAt.toDate()) : 'just now';
+    const initials = c.userName ? c.userName[0].toUpperCase() : 'A';
+    const hue = (c.userId||'').split('').reduce((acc,ch)=>acc+ch.charCodeAt(0),0) % 360;
+    const likedBy = c.likedBy || [];
+    const currentUser = window.__currentUser;
+    const isLiked = currentUser && likedBy.includes(currentUser.uid);
+    const likeCount = c.likes || 0;
+    const aidx = typeof aidxMap[c.userId] === 'number' ? aidxMap[c.userId] : -1;
+    const avatarInner = aidx >= 0 && PP_AVATAR_URLS[aidx]
+      ? `<img src="${PP_AVATAR_URLS[aidx]}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.style.display='none'">`
+      : escHtml(initials);
+    const safeUser = (c.userName||'Anonymous').replace(/'/g, "\'");
+    // Build replies HTML
+    let repliesHTML = '';
+    if (c.replies && c.replies.length > 0) {
+      repliesHTML = `<div class="replies-list" style="margin-top:0.5rem;padding-left:0.75rem;border-left:2px solid rgba(232,109,176,0.25);">` +
+        c.replies.map(r => {
+          const ri = r.userName ? r.userName[0].toUpperCase() : 'A';
+          const rh = (r.userId||'').split('').reduce((acc,ch)=>acc+ch.charCodeAt(0),0) % 360;
+          const raidx = typeof aidxMap[r.userId] === 'number' ? aidxMap[r.userId] : -1;
+          const raInner = raidx >= 0 && PP_AVATAR_URLS[raidx]
+            ? `<img src="${PP_AVATAR_URLS[raidx]}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.style.display='none'">`
+            : escHtml(ri);
+          const rt = r.createdAtMs ? timeAgo(new Date(r.createdAtMs)) : 'just now';
+          return `<div class="comment-item" style="padding:0.45rem 0;border-bottom:none;">
+            <div class="comment-item-avatar" style="width:26px;height:26px;min-width:26px;font-size:0.65rem;background:linear-gradient(135deg,hsl(${rh},60%,55%),hsl(${(rh+40)%360},60%,45%));overflow:hidden;">${raInner}</div>
+            <div class="comment-body">
+              <div class="comment-meta">
+                <span class="comment-user">${escHtml(r.userName||'Anonymous')}</span>
+                <span class="comment-time">· ${rt}</span>
+              </div>
+              <div class="comment-text">${escHtml(r.text)}</div>
+            </div>
+          </div>`;
+        }).join('') +
+      `</div>`;
+    }
+    return `<div class="comment-item" id="cmt-${docId}">
+      <div class="comment-item-avatar" style="background:linear-gradient(135deg,hsl(${hue},60%,55%),hsl(${(hue+40)%360},60%,45%));overflow:hidden;">${avatarInner}</div>
+      <div class="comment-body">
+        <div class="comment-meta">
+          <span class="comment-user">${escHtml(c.userName||'Anonymous')}</span>
+          <span class="comment-time">· ${t}</span>
+        </div>
+        <div class="comment-text">${escHtml(c.text)}</div>
+        <div class="comment-actions">
+          <button class="ca-btn${isLiked ? ' liked' : ''}" id="like-btn-${docId}" onclick="toggleCommentLike('${docId}')">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 12V6.5L5.5 1l.75 3H11l-1.5 5H2z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"${isLiked ? ' fill="currentColor"' : ''}/></svg>
+            <span id="like-count-${docId}">${likeCount}</span>
+          </button>
+          <button class="ca-btn" onclick="toggleReplyBox('${docId}', '${safeUser}')">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M11 1H2a1 1 0 00-1 1v6a1 1 0 001 1h2.5l2 2 2-2H11a1 1 0 001-1V2a1 1 0 00-1-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+            Reply
+          </button>
+        </div>
+        <div class="reply-box" id="reply-box-${docId}" style="display:none;margin-top:0.5rem;">
+          <div class="comment-textarea-box" style="margin-top:0.4rem;">
+            <textarea id="reply-ta-${docId}" placeholder="Replying to ${escHtml(c.userName||'Anonymous')}…" maxlength="500" style="min-height:60px;" oninput="cmtUpdateCount(this)"></textarea>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:0.5rem;margin-top:0.4rem;">
+            <button class="pp-picker-cancel" style="padding:0.3rem 0.8rem;font-size:0.8rem;" onclick="toggleReplyBox('${docId}')">Cancel</button>
+            <button class="comment-submit" style="padding:0.3rem 0.9rem;font-size:0.8rem;" onclick="postReply('${docId}', '${safeUser}')">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 2L15 22l-4-9-9-4 20-7z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Post
+            </button>
+          </div>
+        </div>
+        ${repliesHTML}
+      </div>
+    </div>`;
+  }
+
+  async function _renderComments(docs, commentKey) {
+    const list = document.getElementById('commentsList');
+    if (!list) return;
+    // Gather unique user IDs from comments and replies
+    const uids = new Set();
+    docs.forEach(d => {
+      const c = d.data();
+      if (c.userId) uids.add(c.userId);
+      (c.replies||[]).forEach(r => { if (r.userId) uids.add(r.userId); });
+    });
+    // Fetch avatars in parallel
+    const aidxMap = {};
+    await Promise.all([...uids].map(async uid => {
+      aidxMap[uid] = await _fetchAvatarIdx(uid);
+    }));
+    list.innerHTML = docs.map(d => _buildCommentHTML(d, aidxMap, commentKey)).join('');
+  }
+
   try {
     const q = fb.query(fb.collection(fb.db, 'comments'), fb.where('key', '==', commentKey));
     commentsUnsub = fb.onSnapshot(q,
@@ -5130,32 +5243,8 @@ function renderComments(animeId, ep) {
           const tb = b.data().createdAt?.toMillis?.() || 0;
           return tb - ta;
         });
-        list.innerHTML = docs.map(d => {
-          const c = d.data();
-          const t = c.createdAt?.toDate ? timeAgo(c.createdAt.toDate()) : 'just now';
-          const initials = c.userName ? c.userName[0].toUpperCase() : 'A';
-          const hue = (c.userId||'').split('').reduce((acc,ch)=>acc+ch.charCodeAt(0),0) % 360;
-          return `<div class="comment-item">
-            <div class="comment-item-avatar" style="background:linear-gradient(135deg,hsl(${hue},60%,55%),hsl(${(hue+40)%360},60%,45%))">${escHtml(initials)}</div>
-            <div class="comment-body">
-              <div class="comment-meta">
-                <span class="comment-user">${escHtml(c.userName||'Anonymous')}</span>
-                <span class="comment-time">· ${t}</span>
-              </div>
-              <div class="comment-text">${escHtml(c.text)}</div>
-              <div class="comment-actions">
-                <button class="ca-btn">
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 12V6.5L5.5 1l.75 3H11l-1.5 5H2z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
-                  ${c.likes||0}
-                </button>
-                <button class="ca-btn">
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M11 1H2a1 1 0 00-1 1v6a1 1 0 001 1h2.5l2 2 2-2H11a1 1 0 001-1V2a1 1 0 00-1-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
-                  Reply
-                </button>
-              </div>
-            </div>
-          </div>`;
-        }).join('');
+        // Async render (fetches avatars then renders)
+        _renderComments(docs, commentKey);
       },
       err => {
         const list = document.getElementById('commentsList');
@@ -5207,7 +5296,9 @@ async function postComment(key) {
       userId: user.uid,
       userName: user.displayName || 'Anonymous',
       createdAt: fb.serverTimestamp(),
-      likes: 0
+      likes: 0,
+      likedBy: [],
+      replies: []
     });
     ta.value = '';
     showToast('Comment posted!', 'success');
@@ -5218,6 +5309,91 @@ async function postComment(key) {
   } catch(e) {
     if (e.code === 'permission-denied') showToast('Permission denied. Check Firestore rules.', 'error');
     else showToast('Failed to post comment.', 'error');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// COMMENT INTERACTIONS: LIKE & REPLY
+// ─────────────────────────────────────────────────────────────────
+
+async function toggleCommentLike(docId) {
+  const user = window.__currentUser;
+  if (!user) { openAuthModal('login'); return; }
+  const fb = window.__fb;
+  const ref = fb.doc(fb.db, 'comments', docId);
+  const btn = document.getElementById('like-btn-' + docId);
+  const countEl = document.getElementById('like-count-' + docId);
+  const isLiked = btn && btn.classList.contains('liked');
+  // Optimistic UI update
+  if (btn) {
+    btn.classList.toggle('liked', !isLiked);
+    const path = btn.querySelector('svg path');
+    if (path) { path.setAttribute('fill', isLiked ? 'none' : 'currentColor'); }
+  }
+  if (countEl) {
+    const cur = parseInt(countEl.textContent || '0', 10);
+    countEl.textContent = isLiked ? Math.max(0, cur - 1) : cur + 1;
+  }
+  try {
+    if (isLiked) {
+      await fb.updateDoc(ref, {
+        likes: fb.increment(-1),
+        likedBy: fb.arrayRemove(user.uid)
+      });
+    } else {
+      await fb.updateDoc(ref, {
+        likes: fb.increment(1),
+        likedBy: fb.arrayUnion(user.uid)
+      });
+    }
+  } catch(e) {
+    // Revert optimistic update on failure
+    if (btn) {
+      btn.classList.toggle('liked', isLiked);
+      const path = btn.querySelector('svg path');
+      if (path) { path.setAttribute('fill', isLiked ? 'currentColor' : 'none'); }
+    }
+    if (countEl) {
+      const cur = parseInt(countEl.textContent || '0', 10);
+      countEl.textContent = isLiked ? cur + 1 : Math.max(0, cur - 1);
+    }
+    showToast('Failed to update like.', 'error');
+  }
+}
+
+function toggleReplyBox(docId, userName) {
+  const box = document.getElementById('reply-box-' + docId);
+  if (!box) return;
+  const isOpen = box.style.display !== 'none';
+  box.style.display = isOpen ? 'none' : 'block';
+  if (!isOpen) {
+    const ta = document.getElementById('reply-ta-' + docId);
+    if (ta) ta.focus();
+  }
+}
+
+async function postReply(docId, replyingToName) {
+  const user = window.__currentUser;
+  if (!user) { openAuthModal('login'); return; }
+  const ta = document.getElementById('reply-ta-' + docId);
+  const text = ta?.value?.trim();
+  if (!text) return;
+  const fb = window.__fb;
+  const ref = fb.doc(fb.db, 'comments', docId);
+  const reply = {
+    text,
+    userId: user.uid,
+    userName: user.displayName || 'Anonymous',
+    createdAtMs: Date.now()
+  };
+  try {
+    await fb.updateDoc(ref, { replies: fb.arrayUnion(reply) });
+    if (ta) ta.value = '';
+    toggleReplyBox(docId);
+    showToast('Reply posted!', 'success');
+  } catch(e) {
+    if (e.code === 'permission-denied') showToast('Permission denied. Check Firestore rules.', 'error');
+    else showToast('Failed to post reply.', 'error');
   }
 }
 
@@ -6387,11 +6563,20 @@ function selectAvatarOption(idx) {
   });
 }
 
-function saveAvatarChoice() {
+async function saveAvatarChoice() {
   _ppSelectedAvatarIdx = _ppPendingAvatarIdx;
   localStorage.setItem(PP_AVATAR_KEY, String(_ppSelectedAvatarIdx));
   _ppApplyAvatar(_ppSelectedAvatarIdx, window.__currentUser);
   closeAvatarPicker();
+  // Save avatar index to Firestore so other users see it on comments
+  const user = window.__currentUser;
+  const fb = window.__fb;
+  if (user && fb) {
+    try {
+      const uref = fb.doc(fb.db, 'users', user.uid);
+      await fb.setDoc(uref, { avatarIdx: _ppSelectedAvatarIdx }, { merge: true });
+    } catch(e) {}
+  }
   showToast('Profile picture updated!', 'success');
 }
 
