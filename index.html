@@ -3683,16 +3683,67 @@ let anistreamEpSessions = {};
 let anistreamEpData = [];        // [{number, season, session(slug), title}]
 
 // Find the best matching slug for an anime title via /search
+// Extract a season number from a title like "... Season 4" / "... Part 2" / "... 2nd Season"
+// Returns { cleanTitle, season } — cleanTitle has the season suffix stripped
+function extractSeasonFromTitle(title) {
+  if (!title) return { cleanTitle: title, season: null };
+  let season = null;
+  let clean = title;
+
+  // "Season 4", "Season IV", etc.
+  const mSeason = clean.match(/\bSeason\s+(\d+)\b/i);
+  if (mSeason) { season = parseInt(mSeason[1], 10); clean = clean.replace(mSeason[0], '').trim(); }
+
+  // "2nd Season", "3rd Season", "4th Season"
+  if (!season) {
+    const mOrd = clean.match(/\b(\d+)(?:st|nd|rd|th)\s+Season\b/i);
+    if (mOrd) { season = parseInt(mOrd[1], 10); clean = clean.replace(mOrd[0], '').trim(); }
+  }
+
+  // "Part 2", "Part II" (treat as season when no other season found)
+  if (!season) {
+    const mPart = clean.match(/\bPart\s+(\d+)\b/i);
+    if (mPart) { season = parseInt(mPart[1], 10); clean = clean.replace(mPart[0], '').trim(); }
+  }
+
+  // Roman numerals at end: "Title II", "Title III", "Title IV" etc.
+  if (!season) {
+    const romans = { II:2, III:3, IV:4, V:5, VI:6, VII:7, VIII:8 };
+    const mRoman = clean.match(/\b(II|III|IV|V|VI|VII|VIII)\s*$/);
+    if (mRoman && romans[mRoman[1]]) {
+      season = romans[mRoman[1]];
+      clean = clean.replace(mRoman[0], '').trim();
+    }
+  }
+
+  // Clean up trailing punctuation/dashes left behind
+  clean = clean.replace(/[\s\-:]+$/, '').trim();
+
+  return { cleanTitle: clean, season };
+}
+
 async function anistreamFindSession(anime) {
-  const titles = [
-    anime.title.english,
-    anime.title.romaji,
-    anime.title.english && anime.title.english.replace(/\s*[\(:].*/,'').trim(),
-    anime.title.romaji && anime.title.romaji.replace(/\s*[\(:].*/,'').trim(),
+  const engRaw   = anime.title.english || '';
+  const romRaw   = anime.title.romaji  || '';
+
+  // Extract season from both title variants
+  const { cleanTitle: engClean, season: engSeason } = extractSeasonFromTitle(engRaw);
+  const { cleanTitle: romClean, season: romSeason  } = extractSeasonFromTitle(romRaw);
+
+  // Detected season (prefer English title's detection, fall back to romaji)
+  const detectedSeason = engSeason || romSeason || null;
+
+  // Build candidate search queries — clean (season-stripped) titles first, then raw
+  const candidates = [
+    engClean,
+    romClean,
+    engRaw,
+    romRaw,
+    engClean && engClean.replace(/\s*[\(:].*/,'').trim(),
+    romClean && romClean.replace(/\s*[\(:].*/,'').trim(),
   ].filter((t, i, arr) => t && arr.indexOf(t) === i);
 
-  // First try exact slug match
-  for (const t of titles) {
+  for (const t of candidates) {
     const slug = titleToSlug(t);
     if (!slug) continue;
     try {
@@ -3703,36 +3754,51 @@ async function anistreamFindSession(anime) {
                 || results.find(r => r.slug === slug)
                 || results.find(r => (r.title||'').toLowerCase().startsWith(lower.split(' ')[0]))
                 || results[0];
-      if (best) return best.slug;
+      if (best) return { slug: best.slug, season: detectedSeason };
     } catch(_) { continue; }
   }
-  throw new Error('Not found on Server 3 for "' + (anime.title.english || anime.title.romaji) + '"');
+  throw new Error('Not found on Server 3 for "' + (engRaw || romRaw) + '"');
 }
 
 // Fetch episode list from /api/anime/<slug>
-async function anistreamFetchEpisodes(slug) {
+// Returns episodes for a specific season only (if season provided), or all episodes flat
+async function anistreamFetchEpisodes(slug, filterSeason) {
   const data = await animeApiFetch('/api/anime/' + encodeURIComponent(slug));
   const eps = data.episodes || [];
-  // Normalise to a flat numbered list (season × episode)
-  // group by season first, then assign sequential episode numbers within each season
+
+  // Group by season
   const seasons = {};
   eps.forEach(ep => {
     const s = ep.season || 1;
     if (!seasons[s]) seasons[s] = [];
     seasons[s].push(ep);
   });
-  const result = [];
-  Object.keys(seasons).sort((a,b) => +a - +b).forEach(s => {
-    seasons[s].sort((a,b) => (a.episode||0) - (b.episode||0)).forEach(ep => {
-      result.push({
-        number:  ep.episode || (result.length + 1),
-        season:  ep.season  || 1,
-        title:   ep.title   || `Episode ${ep.episode}`,
-        snapshot: null,
-      });
-    });
-  });
-  return result;
+
+  const allSeasonNums = Object.keys(seasons).map(Number).sort((a,b) => a - b);
+
+  // Pick which season to show: use filterSeason if valid, else season 1
+  let targetSeason = 1;
+  if (filterSeason && allSeasonNums.includes(filterSeason)) {
+    targetSeason = filterSeason;
+  } else if (filterSeason && allSeasonNums.length >= filterSeason) {
+    targetSeason = allSeasonNums[filterSeason - 1] || allSeasonNums[0];
+  } else {
+    targetSeason = allSeasonNums[0] || 1;
+  }
+
+  const seasonEps = (seasons[targetSeason] || []).slice()
+    .sort((a,b) => (a.episode||0) - (b.episode||0));
+
+  return {
+    episodes: seasonEps.map(ep => ({
+      number:  ep.episode || 1,
+      season:  targetSeason,
+      title:   ep.title   || `Episode ${ep.episode}`,
+      snapshot: null,
+    })),
+    targetSeason,
+    allSeasons: allSeasonNums,
+  };
 }
 
 // Build the /embed URL for the player iframe
@@ -3747,13 +3813,13 @@ async function loadAnistreamPlayer(anime, epNumber) {
   try {
     if (!anistreamCache[cacheKey]) {
       setAnistreamStatus('loading', 'Searching for anime...');
-      const slug = await anistreamFindSession(anime);
+      const { slug, season: detectedSeason } = await anistreamFindSession(anime);
       setAnistreamStatus('loading', 'Loading episodes...');
-      const epData = await anistreamFetchEpisodes(slug);
-      anistreamCache[cacheKey] = { slug, epData };
+      const { episodes, targetSeason, allSeasons } = await anistreamFetchEpisodes(slug, detectedSeason);
+      anistreamCache[cacheKey] = { slug, epData: episodes, targetSeason, allSeasons };
     }
     const cached = anistreamCache[cacheKey];
-    anistreamAnimeSession = cached.slug; // slug stored in anistreamAnimeSession
+    anistreamAnimeSession = cached.slug;
     anistreamEpData = cached.epData;
     anistreamEpSessions = {};
     anistreamEpData.forEach(ep => { anistreamEpSessions[ep.number] = ep.season; });
@@ -3768,7 +3834,8 @@ async function loadAnistreamPlayer(anime, epNumber) {
     document.getElementById('playerIframe').src = anistreamEmbedUrl(
       anistreamAnimeSession, epObj.season, epObj.number
     );
-    setAnistreamStatus('ok', `Server 3 · ${anistreamEpData.length} eps`);
+    const seasonLabel = cached.allSeasons.length > 1 ? ` S${cached.targetSeason}` : '';
+    setAnistreamStatus('ok', `Server 3${seasonLabel} · ${anistreamEpData.length} eps`);
   } catch (err) {
     setAnistreamStatus('error', 'Server 3 unavailable');
     showToast('Server 3: ' + err.message, 'error');
