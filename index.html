@@ -3644,26 +3644,45 @@ function dismissDailyBanner() {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// ANISTREAM CONFIG
+// ANIMEAPI (SERVER 3) CONFIG
+// Base URL is the ngrok tunnel hosting the local AnimeAPI
+// /embed endpoint: GET /embed?anime=<slug>&s=<season>&ep=<episode>
+// /search endpoint: GET /search?q=<query>  → [{id, title, slug, cover_url}]
+// /api/anime/<slug>  → {id, title, slug, episodes:[{season, episode, title}]}
 // ─────────────────────────────────────────────────────────────────
-const ANISTREAM_DEFAULT = 'https://combined-three-phi.vercel.app';
+const ANIMEAPI_BASE = 'https://appetite-barrette-empirical.ngrok-free.dev';
 
-function getAnistreamBase() {
-  return localStorage.getItem('anistream_worker') || ANISTREAM_DEFAULT;
+function getAnimeApiBase() {
+  return ANIMEAPI_BASE;
 }
 
-const anistreamCache = {};
-let anistreamAnimeSession = null;
-let anistreamEpSessions = {};
-let anistreamEpData = [];
+// Convert an anime title to a URL slug matching the API's slugify():
+//   lowercase, strip non-word chars except hyphens, replace spaces/underscores with hyphens
+function titleToSlug(title) {
+  if (!title) return '';
+  return title
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/[\s_]+/g, '-')
+    .replace(/-+/g, '-');
+}
 
-async function anistreamFetch(path) {
-  const url = getAnistreamBase() + path;
+// Fetch with ngrok browser-warning bypass header
+async function animeApiFetch(path) {
+  const url = getAnimeApiBase() + path;
   const r = await fetch(url, { headers: { 'ngrok-skip-browser-warning': '1' } });
-  if (!r.ok) throw new Error(`AniStream HTTP ${r.status}`);
+  if (!r.ok) throw new Error(`AnimeAPI HTTP ${r.status}`);
   return r.json();
 }
 
+// Cache: slug -> [{season, episode, title}]
+const anistreamCache = {};
+let anistreamAnimeSession = null; // repurposed: stores the resolved slug
+let anistreamEpSessions = {};
+let anistreamEpData = [];        // [{number, season, session(slug), title}]
+
+// Find the best matching slug for an anime title via /search
 async function anistreamFindSession(anime) {
   const titles = [
     anime.title.english,
@@ -3672,71 +3691,84 @@ async function anistreamFindSession(anime) {
     anime.title.romaji && anime.title.romaji.replace(/\s*[\(:].*/,'').trim(),
   ].filter((t, i, arr) => t && arr.indexOf(t) === i);
 
-  for (const q of titles) {
+  // First try exact slug match
+  for (const t of titles) {
+    const slug = titleToSlug(t);
+    if (!slug) continue;
     try {
-      const results = await anistreamFetch('/search?q=' + encodeURIComponent(q));
+      const results = await animeApiFetch('/search?q=' + encodeURIComponent(t));
       if (!results || !results.length) continue;
-      const lower = q.toLowerCase();
+      const lower = t.toLowerCase();
       const best = results.find(r => (r.title||'').toLowerCase() === lower)
+                || results.find(r => r.slug === slug)
                 || results.find(r => (r.title||'').toLowerCase().startsWith(lower.split(' ')[0]))
                 || results[0];
-      return best.session;
+      if (best) return best.slug;
     } catch(_) { continue; }
   }
   throw new Error('Not found on Server 3 for "' + (anime.title.english || anime.title.romaji) + '"');
 }
 
-async function anistreamFetchEpisodes(animeSession) {
-  const eps = await anistreamFetch('/episodes?session=' + encodeURIComponent(animeSession));
-  // Always use index+1 as the episode number — the API's ep.number can be
-  // 0-based or offset (e.g. returns ep 2 for what should be ep 1).
-  return eps.map((ep, i) => ({
-    number:   i + 1,
-    session:  ep.session,
-    title:    ep.title    || `Episode ${i + 1}`,
-    snapshot: ep.snapshot || null,
-  }));
+// Fetch episode list from /api/anime/<slug>
+async function anistreamFetchEpisodes(slug) {
+  const data = await animeApiFetch('/api/anime/' + encodeURIComponent(slug));
+  const eps = data.episodes || [];
+  // Normalise to a flat numbered list (season × episode)
+  // group by season first, then assign sequential episode numbers within each season
+  const seasons = {};
+  eps.forEach(ep => {
+    const s = ep.season || 1;
+    if (!seasons[s]) seasons[s] = [];
+    seasons[s].push(ep);
+  });
+  const result = [];
+  Object.keys(seasons).sort((a,b) => +a - +b).forEach(s => {
+    seasons[s].sort((a,b) => (a.episode||0) - (b.episode||0)).forEach(ep => {
+      result.push({
+        number:  ep.episode || (result.length + 1),
+        season:  ep.season  || 1,
+        title:   ep.title   || `Episode ${ep.episode}`,
+        snapshot: null,
+      });
+    });
+  });
+  return result;
 }
 
-function anistreamEmbedUrl(animeSession, epSession, title, malId, epNum) {
-  const base = getAnistreamBase();
-  let url = `${base}/embed?anime_session=${encodeURIComponent(animeSession)}&episode_session=${encodeURIComponent(epSession)}&title=${encodeURIComponent(title || '')}`;
-  if (malId)  url += `&mal_id=${encodeURIComponent(malId)}`;
-  if (epNum)  url += `&ep_num=${encodeURIComponent(epNum)}`;
-  return url;
+// Build the /embed URL for the player iframe
+function anistreamEmbedUrl(slug, season, epNumber) {
+  const base = getAnimeApiBase();
+  return `${base}/embed?anime=${encodeURIComponent(slug)}&s=${season}&ep=${epNumber}`;
 }
 
 async function loadAnistreamPlayer(anime, epNumber) {
-  const title = anime.title.english || anime.title.romaji;
   const cacheKey = String(anime.id);
   setAnistreamStatus('loading', 'Connecting to Server 3...');
   try {
     if (!anistreamCache[cacheKey]) {
       setAnistreamStatus('loading', 'Searching for anime...');
-      const animeSession = await anistreamFindSession(anime);
+      const slug = await anistreamFindSession(anime);
       setAnistreamStatus('loading', 'Loading episodes...');
-      const epData = await anistreamFetchEpisodes(animeSession);
-      anistreamCache[cacheKey] = { animeSession, epData };
+      const epData = await anistreamFetchEpisodes(slug);
+      anistreamCache[cacheKey] = { slug, epData };
     }
     const cached = anistreamCache[cacheKey];
-    anistreamAnimeSession = cached.animeSession;
+    anistreamAnimeSession = cached.slug; // slug stored in anistreamAnimeSession
     anistreamEpData = cached.epData;
     anistreamEpSessions = {};
-    anistreamEpData.forEach(ep => { anistreamEpSessions[ep.number] = ep.session; });
+    anistreamEpData.forEach(ep => { anistreamEpSessions[ep.number] = ep.season; });
+
     renderAnistreamEpSidebar(anistreamEpData, epNumber);
+
     const epObj = anistreamEpData.find(e => e.number === epNumber)
                || anistreamEpData[epNumber - 1]
                || anistreamEpData[0];
     if (!epObj) throw new Error(`Episode ${epNumber} not found on Server 3`);
-    const epLabel = `${title} — Episode ${epObj.number}`;
-    const _malId = anime._malId || anime.id || '';
-    document.getElementById('playerIframe').src = anistreamEmbedUrl(anistreamAnimeSession, epObj.session, epLabel, _malId, epObj.number);
+
+    document.getElementById('playerIframe').src = anistreamEmbedUrl(
+      anistreamAnimeSession, epObj.season, epObj.number
+    );
     setAnistreamStatus('ok', `Server 3 · ${anistreamEpData.length} eps`);
-    const nextEp = anistreamEpData.find(e => e.number === epNumber + 1);
-    if (nextEp) {
-      fetch(getAnistreamBase() + '/prefetch?anime_session=' + encodeURIComponent(anistreamAnimeSession) + '&episode_session=' + encodeURIComponent(nextEp.session),
-        { headers: { 'ngrok-skip-browser-warning': '1' } }).catch(() => {});
-    }
   } catch (err) {
     setAnistreamStatus('error', 'Server 3 unavailable');
     showToast('Server 3: ' + err.message, 'error');
@@ -3765,14 +3797,13 @@ function renderAnistreamEpSidebar(epData, activeEp) {
 function renderAnistreamEpSlice(slice, activeEp) {
   const scroll = document.getElementById('epScroll');
   scroll.innerHTML = slice.map(ep => {
-    const hasThumb = !!ep.snapshot;
     return `<div class="ep-item ${ep.number === activeEp ? 'active' : ''}" id="ep-item-${ep.number}" onclick="selectEpAnistream(${ep.number})">
-      <div class="ep-thumb" style="${hasThumb ? `background-image:url('${escHtml(ep.snapshot)}');background-size:cover;background-position:center` : ''}">
+      <div class="ep-thumb">
         <span class="ep-thumb-num">EP ${ep.number}</span>
       </div>
       <div class="ep-item-info">
         <div class="ep-item-title">${escHtml(ep.title || 'Episode ' + ep.number)}</div>
-        <div class="ep-item-date">${currentAnime?.startDate?.year || ''}</div>
+        <div class="ep-item-date">S${String(ep.season||1).padStart(2,'0')}E${String(ep.number).padStart(2,'0')}</div>
       </div>
     </div>`;
   }).join('');
@@ -3791,12 +3822,12 @@ function switchAnistreamEpPage(i, btn) {
 
 function selectEpAnistream(epNumber) {
   currentEp = epNumber;
-  const title = currentAnime ? (currentAnime.title.english || currentAnime.title.romaji) : '';
   const epObj = anistreamEpData.find(e => e.number === epNumber);
-  if (!epObj) { showToast('Episode not available on Server 3', 'error'); return; }
-  const epLabel = `${title} — Episode ${epNumber}`;
-  const _malId = currentAnime ? (currentAnime._malId || currentAnime.id || '') : '';
-  document.getElementById('playerIframe').src = anistreamEmbedUrl(anistreamAnimeSession, epObj.session, epLabel, _malId, epNumber);
+  if (!epObj || !anistreamAnimeSession) { showToast('Episode not available on Server 3', 'error'); return; }
+
+  document.getElementById('playerIframe').src = anistreamEmbedUrl(
+    anistreamAnimeSession, epObj.season, epObj.number
+  );
   document.querySelectorAll('.ep-item').forEach(el => el.classList.remove('active'));
   const el = document.getElementById('ep-item-' + epNumber);
   if (el) { el.classList.add('active'); el.scrollIntoView({ block: 'nearest' }); }
@@ -3805,11 +3836,6 @@ function selectEpAnistream(epNumber) {
   renderComments(currentAnime.id, epNumber);
   updateHash(currentAnime.id, epNumber);
   incrementUserEpisodes();
-  const nextEp = anistreamEpData.find(e => e.number === epNumber + 1);
-  if (nextEp && anistreamAnimeSession) {
-    fetch(getAnistreamBase() + '/prefetch?anime_session=' + encodeURIComponent(anistreamAnimeSession) + '&episode_session=' + encodeURIComponent(nextEp.session),
-      { headers: { 'ngrok-skip-browser-warning': '1' } }).catch(() => {});
-  }
 }
 
 function setAnistreamStatus(state, text) {
