@@ -3746,11 +3746,18 @@ async function anistreamFindSession(anime) {
   for (const t of candidates) {
     const slug = titleToSlug(t);
     if (!slug) continue;
+    // Strip special/invalid symbols from the query so e.g. "Tokyo Ghoul:re" becomes
+    // "Tokyo Ghoul re" — this prevents the API from receiving a stray colon, @, !, $, etc.
+    // that would cause it to miss the match and fall back to the wrong top result.
+    const tClean = t.replace(/[^\w\s\-]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!tClean) continue;
     try {
-      const results = await animeApiFetch('/search?q=' + encodeURIComponent(t));
+      const results = await animeApiFetch('/search?q=' + encodeURIComponent(tClean));
       if (!results || !results.length) continue;
-      const lower = t.toLowerCase();
+      const lower = tClean.toLowerCase();
+      const slugClean = titleToSlug(tClean);
       const best = results.find(r => (r.title||'').toLowerCase() === lower)
+                || results.find(r => r.slug === slugClean)
                 || results.find(r => r.slug === slug)
                 || results.find(r => (r.title||'').toLowerCase().startsWith(lower.split(' ')[0]))
                 || results[0];
